@@ -1,17 +1,14 @@
 ﻿using System.Net;
 using System.Net.Sockets;
-using MySql.Data.MySqlClient;
-using Org.BouncyCastle.Crypto.Parameters;
-using Org.BouncyCastle.Math.EC.Multiplier;
+
 using static System.Console;
-// using static IOHelper;
 
 class Server
 {
     const int defaultPort = 5000;
 
     static readonly List<ClientHandler> connectedClients = [];
-    static readonly List<ChatGroup> chatGroups = [];
+    static readonly List<ChatGroupHandler> chatGroups = [];
     static TcpListener? server;
 
     public static void Main()
@@ -26,7 +23,7 @@ class Server
 
             while(true)
             {
-                ServerStart(ref serverIP, ref port, out bool stopProgram);
+                ServerStartUp(ref serverIP, ref port, out bool stopProgram);
                 if(stopProgram)
                     return;
 
@@ -34,6 +31,7 @@ class Server
                     server = new(IPAddress.Any, port);
                 else
                     server = new(IPAddress.Parse(serverIP), port);
+
                 server.Start();
                 LogManager.AddLog($"Server starts on address: {serverIP ?? "Any"}, port: {port}");
 
@@ -49,8 +47,8 @@ class Server
         }
         catch(Exception ex)
         {
-            WriteLine($" Error while running server: {ex.Message}");
-            LogManager.AddLog($"Error while running server: {ex.Message}");
+            WriteLine($" Error while running program: {ex.Message}");
+            LogManager.AddLog($"Error while running program: {ex.Message}");
             ReadKey(true);
         }
     }
@@ -93,7 +91,7 @@ class Server
             IOHelper.WriteBorder();
 
             if(done = DbHelper.InitMySql(server, db, uid, password, out string errorMessage))
-                WriteLine(" Connect to MySql database successfully.");
+                WriteLine(" Connect to MySql database successfully");
             else
                 WriteLine($" Error while connecting to MySql DB: {errorMessage}");
 
@@ -104,11 +102,11 @@ class Server
         return true;
     }
 
-    static void ServerStart(ref string? serverIP, ref int port, out bool stopProgram)
+    static void ServerStartUp(ref string? serverIP, ref int port, out bool stopProgram)
     {
         while(true)
         {
-            ServerHelper.StartMenu(serverIP, port);
+            ServerHelper.ShowStartUpMenu(serverIP, port);
 
             switch(IOHelper.ReadInput(false))
             {
@@ -120,7 +118,7 @@ class Server
                     Write(" Enter IP: ");
                     serverIP = ReadLine();
 
-                    if(!ServerHelper.CheckIPv4(serverIP))
+                    if(serverIP == null || !ServerHelper.CheckIPv4(serverIP))
                     {
                         serverIP = null;
                         WriteLine(" Invalid IP.");
@@ -146,7 +144,7 @@ class Server
                     continue;
 
                 case "4":
-                    ServerHelper.ViewActivityLog();
+                    while(ServerHelper.ViewActivityLog());
                     continue;
 
                 case "0": case null:
@@ -172,7 +170,7 @@ class Server
                 lock(connectedClients)
                     connectedClients.Add(clientHandler);
 
-                _ = Task.Run(() => clientHandler.Run(token));
+                _ = Task.Run(() => clientHandler.HandlingClientAsync(token), token);
             }
         }
         catch(OperationCanceledException) {}
@@ -186,12 +184,12 @@ class Server
     {
         while(true)
         {
-            ServerHelper.ServerControlMenu(serverIP, port);
+            ServerHelper.ShowControlMenu(serverIP, port);
 
             switch(IOHelper.ReadInput(false))
             {
                 case "4":
-                    ServerHelper.ViewActivityLog();
+                    while(ServerHelper.ViewActivityLog());
                     continue;
 
                 case "0": case null:
@@ -206,39 +204,6 @@ class Server
 
     private class ServerHelper
     {
-        public static void StartMenu(string? serverIP, int port)
-        {
-            Clear();
-            IOHelper.WriteHeader("Zelo Server Control Center");
-            WriteLine($" Server's IP: {serverIP ?? "Any"}");
-            WriteLine($" Server's port: {port}");
-            IOHelper.WriteBorder();
-            WriteLine(" 1. Start server");
-            WriteLine(" 2. Change IP");
-            WriteLine(" 3. Change port");
-            WriteLine(" 4. View activity log");
-            WriteLine(" 0. Shut down program");
-            IOHelper.WriteBorder();
-            Write(" Enter choice: ");
-        }
-
-        public static void ServerControlMenu(string? serverIP, int port)
-        {
-            Clear();
-            IOHelper.WriteHeader("Zelo Server Control Center");
-            WriteLine(" Server is online");
-            WriteLine($" Address: {serverIP ?? "Any"}");
-            WriteLine($" Port: {port}");
-            IOHelper.WriteBorder();
-            WriteLine(" 1. Manage connected clients");
-            WriteLine(" 2. Manage chat groups");
-            WriteLine(" 3. Broadcast message");
-            WriteLine(" 4. View activity log");
-            WriteLine(" 0. Shut down server");
-            IOHelper.WriteBorder();
-            Write(" Enter choice: ");
-        }
-
         public static bool CheckIPv4(string? ipAddress)
         {
             if(!IPAddress.TryParse(ipAddress, out _))
@@ -262,7 +227,41 @@ class Server
             return true;
         }
 
-        public static void ViewActivityLog()
+        public static void ShowStartUpMenu(string? serverIP, int port)
+        {
+            Clear();
+            IOHelper.WriteHeader("Zelo Server Control Center");
+            WriteLine($" Server's IP: {serverIP ?? "Any"}");
+            WriteLine($" Server's port: {port}");
+            IOHelper.WriteBorder();
+            WriteLine(" 1. Start server");
+            WriteLine(" 2. Change IP");
+            WriteLine(" 3. Change port");
+            WriteLine(" 4. View activity log");
+            WriteLine(" 0. Shut down program");
+            IOHelper.WriteBorder();
+            Write(" Enter choice: ");
+        }
+
+        public static void ShowControlMenu(string? serverIP, int port)
+        {
+            Clear();
+            IOHelper.WriteHeader("Zelo Server Control Center");
+            WriteLine(" Server is online");
+            WriteLine($" Address: {serverIP ?? "Any"}");
+            WriteLine($" Port: {port}");
+            IOHelper.WriteBorder();
+            WriteLine(" 1. Manage connected clients");
+            WriteLine(" 2. Manage chat groups");
+            WriteLine(" 3. Broadcast message");
+            WriteLine(" 4. View activity log");
+            WriteLine(" 0. Shut down server");
+            IOHelper.WriteBorder();
+            Write(" Enter choice: ");
+        }
+
+        // Return false when leaving viewer
+        public static bool ViewActivityLog()
         {
             Clear();
             IOHelper.WriteHeader("Zelo Server Control Center");
@@ -274,15 +273,22 @@ class Server
             LogManager.WriteCurrentLog();
 
             CancellationTokenSource leaveLogViewerToken = new();
-
             _ = Task.Run(() => LogManager.WriteNewLogAsync(leaveLogViewerToken.Token));
 
             while(true)
             {
-                if(ReadKey(true).Key == ConsoleKey.Escape)
+                ConsoleKey key = ReadKey(true).Key;
+
+                switch(key)
                 {
-                    leaveLogViewerToken.Cancel();
-                    break;
+                    case ConsoleKey.Escape:
+                        leaveLogViewerToken.Cancel();
+                        return false;
+
+                    case ConsoleKey.Delete:
+                        LogManager.ClearLog();
+                        leaveLogViewerToken.Cancel();
+                        return true;
                 }
             }
         }

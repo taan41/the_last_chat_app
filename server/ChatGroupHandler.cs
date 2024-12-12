@@ -1,4 +1,4 @@
-class ChatGroup(int _id, string _name)
+class ChatGroupHandler(int _id, string _name)
 {
     private readonly List<ClientHandler> connectedClients = [];
     

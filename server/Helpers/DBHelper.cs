@@ -47,9 +47,9 @@ static class DbHelper
             CREATE TABLE Users (
                 UserID INT AUTO_INCREMENT PRIMARY KEY,
                 Username NVARCHAR({MagicNumbers.usernameLimit}) NOT NULL UNIQUE,
+                Nickname NVARCHAR({MagicNumbers.nicknameLimit}) NOT NULL,
                 PasswordHash VARBINARY({MagicNumbers.pwdHashLen}) DEFAULT NULL,
                 Salt VARBINARY({MagicNumbers.pwdSaltLen}) DEFAULT NULL,
-                Nickname NVARCHAR({MagicNumbers.nicknameLimit}) NOT NULL,
                 CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )", conn))
         {
@@ -94,9 +94,35 @@ static class DbHelper
         }
     }
 
-    public static bool Register(string username, string password, string nickname, out string errorMessage)
+    public static bool CheckUsername(string username, out string errorMessage)
     {
-        string query = "INSERT INTO Users (Username, PasswordHash, Salt, Nickname) VALUES (@username, @passwordHash, @salt, @nickname)";
+        string query = "SELECT * FROM Users WHERE Username = @username";
+        errorMessage = "";
+
+        try
+        {
+            using MySqlConnection conn = new(connectionString);
+            conn.Open();
+
+            using MySqlCommand cmd = new(query, conn);
+            cmd.Parameters.AddWithValue("@username", username);
+
+            using MySqlDataReader reader = cmd.ExecuteReader();
+            if(!reader.Read())
+                return true;
+            else
+                return false;
+        }
+        catch(MySqlException ex)
+        {
+            errorMessage = ex.Message;
+            return false;
+        }
+    }
+
+    public static bool Register(string username, string nickname, byte[] pwdHash, byte[] salt, out string errorMessage)
+    {
+        string query = "INSERT INTO Users (Username, Nickname, PasswordHash, Salt) VALUES (@username, @nickname, @pwdHash, @salt)";
         errorMessage = "";
 
         try
@@ -107,12 +133,43 @@ static class DbHelper
             using MySqlCommand cmd = new(query, conn);
             cmd.Parameters.AddWithValue("@username", username);
             cmd.Parameters.AddWithValue("@nickname", nickname);
-
-            (byte[] hash, byte[] salt) = Utilities.HashPassword(password);
-            cmd.Parameters.AddWithValue("@passwordHash", hash);
+            cmd.Parameters.AddWithValue("@pwdHash", pwdHash);
             cmd.Parameters.AddWithValue("@salt", salt);
 
             cmd.ExecuteNonQuery();
+
+            return true;
+        }
+        catch (MySqlException ex)
+        {
+            errorMessage = ex.Message;
+            return false;
+        }
+    }
+
+    public static bool GetUserPwd(string username, ref byte[] pwdHash, ref byte[] salt, out string errorMessage)
+    {
+        string query = "SELECT PasswordHash, Salt FROM Users WHERE Username = @username";
+        errorMessage = "";
+
+        try
+        {
+            using MySqlConnection conn = new(connectionString);
+            conn.Open();
+
+            using MySqlCommand cmd = new(query, conn);
+            cmd.Parameters.AddWithValue("@username", username);
+
+            using MySqlDataReader reader = cmd.ExecuteReader();
+
+            if(!reader.Read())
+            {
+                errorMessage = "User not found";
+                return false;
+            }
+
+            reader.GetBytes("PasswordHash", 0, pwdHash, 0, MagicNumbers.pwdHashLen);
+            reader.GetBytes("Salt", 0, salt, 0, MagicNumbers.pwdSaltLen);
 
             return true;
         }
@@ -349,7 +406,7 @@ static class DbHelper
     
     public static List<Log>? GetLogHistory(out string errorMessage)
     {
-        string query = @"SELECT LogTime, Content From ActivityLog ORDER BY LogTime";
+        string query = "SELECT LogTime, Content FROM ActivityLog ORDER BY LogTime";
         errorMessage = "";
 
         List<Log> logList = [];
@@ -369,13 +426,39 @@ static class DbHelper
 
                 logList.Add(new(timestamp, content));
             }
+
+            return logList;
         }
         catch (MySqlException ex)
         {
             errorMessage = ex.Message;
             return null;
         }
+    }
 
-        return logList;
+    public static bool ClearLog(out string errorMessage)
+    {
+        string delQuery = "DELETE FROM ActivityLog";
+        string resetIncrementQuery = "ALTER TABLE ActivityLog AUTO_INCREMENT = 1";
+        errorMessage = "";
+
+        try
+        {
+            using MySqlConnection conn = new(connectionString);
+            conn.Open();
+
+            using MySqlCommand delCmd = new(delQuery, conn);
+            delCmd.ExecuteNonQuery();
+
+            using MySqlCommand resetIncrementCmd = new(resetIncrementQuery, conn);
+            resetIncrementCmd.ExecuteNonQuery();
+
+            return true;
+        }
+        catch (MySqlException ex)
+        {
+            errorMessage = ex.Message;
+            return false;
+        }
     }
 }

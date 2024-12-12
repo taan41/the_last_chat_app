@@ -13,7 +13,7 @@ class ClientHandler
     int uid;
     string? nickname;
     User? user, partner;
-    ChatGroup? chatGroup;
+    ChatGroupHandler? chatGroup;
 
     public ClientHandler(TcpClient _client)
     {
@@ -24,7 +24,7 @@ class ClientHandler
         LogManager.AddLog($"Client connected: {endPoint}");
     }
 
-    public async Task Run(CancellationToken token)
+    public async Task HandlingClientAsync(CancellationToken token)
     {
         byte[] buffer = new byte[MagicNumbers.bufferSize];
         Memory<byte> memory = new(buffer);
@@ -35,10 +35,11 @@ class ClientHandler
 
         try
         {
-            while((bytesRead = await stream.ReadAsync(memory, token)) > 0)
+            while(!token.IsCancellationRequested)
             {
-                if(token.IsCancellationRequested)
-                    break;
+                bytesRead = await stream.ReadAsync(memory, token);
+                if(bytesRead <= 0)
+                    continue;
 
                 receivedCmd = Command.Deserialize(DecodeBytes(buffer, 0, bytesRead));
                 if(receivedCmd == null)
@@ -47,12 +48,30 @@ class ClientHandler
                     return;
                 }
 
-                string? errorMessage;
+                string? errorMessage = string.Empty;
                 switch (receivedCmd.CommandType)
                 {
+                    case CommandType.CheckUsername:
+                        if(!DbHelper.CheckUsername(receivedCmd.Payload, out errorMessage))
+                        {
+                            if(errorMessage.Length > 0)
+                                LogManager.AddLog($"Error while checking username: {errorMessage}");
+                            else
+                                errorMessage = "Unavailable username";
+                        }
+                        break;
+
                     case CommandType.Register:
                         if(Register(receivedCmd.Payload, out string registeredUsername, out errorMessage))
                             LogManager.AddLog($"{endPoint} registered with username '{registeredUsername}'");
+                        break;
+
+                    case CommandType.RequestUserPwd:
+                        byte[] pwdHash = new byte[MagicNumbers.pwdHashLen];
+                        byte[] salt = new byte[MagicNumbers.pwdSaltLen];
+
+                        if(DbHelper.GetUserPwd(receivedCmd.Payload, ref pwdHash, ref salt, out errorMessage))
+                            cmdToSend.Payload = $"{DecodeBytes(pwdHash)}|{DecodeBytes(salt)}";
                         break;
 
                     case CommandType.Login:
@@ -65,7 +84,7 @@ class ClientHandler
                         break;
                 }
 
-                if(!string.IsNullOrEmpty(errorMessage))
+                if(!string.IsNullOrWhiteSpace(errorMessage))
                 {
                     LogManager.AddLog(errorMessage);
                     cmdToSend = new(CommandType.Error, errorMessage);
@@ -76,8 +95,11 @@ class ClientHandler
                 await stream.WriteAsync(EncodeString(Command.Serialize(cmdToSend)), token);
             }
         }
-        catch(Exception)
-        {}
+        catch(OperationCanceledException) {}
+        catch(Exception ex)
+        {
+            LogManager.AddLog($"Error while handling client: {ex.Message}");
+        }
     }
 
     private static bool Register(string data, out string username, out string errorMessage)
@@ -85,13 +107,13 @@ class ClientHandler
         username = "";
 
         string[] parts = data.Split('|');
-        if(parts.Length != 3)
+        if(parts.Length != 4)
         {
-            errorMessage = "Invalid data while registtering";
+            errorMessage = "Invalid data while registering";
             return false;
         }
 
-        return DbHelper.Register(username = parts[0], parts[1], parts[2], out errorMessage);
+        return DbHelper.Register(username = parts[0], parts[1], EncodeString(parts[2]), EncodeString(parts[3]), out errorMessage);
     }
 
     private static User? Login(string data, out string errorMessage)

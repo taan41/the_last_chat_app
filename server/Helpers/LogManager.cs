@@ -37,8 +37,23 @@ static class LogManager
         if(!DbHelper.AddLog(logContent, out string errorMessage))
             Console.WriteLine($" Error while adding log: {errorMessage}");
         
-        if(Interlocked.Exchange(ref signalFlag, 1) == 0)
+        if(Interlocked.Exchange(ref signalFlag, 1) == 0) // Check if there's an active listener
             logSemaphore.Release(); // Signal that a new log is available.
+    }
+
+    public static void ClearLog()
+    {
+        if(!initailized)
+            return;
+
+        lock(logList)
+            logList.Clear();
+
+        if(!DbHelper.ClearLog(out string errorMessage))
+        {
+            Console.WriteLine($" Error while clearing log: {errorMessage}");
+            AddLog($"Error while clearing log: {errorMessage}");
+        }
     }
 
     public static void WriteCurrentLog()
