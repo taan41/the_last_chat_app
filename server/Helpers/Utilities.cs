@@ -4,14 +4,13 @@ using System.Text;
 class MagicNumbers
 {
     public const int
-        usernameLimit = 50,
-        passwordLimit = 100,
-        nicknameLimit = 100,
-        groupNameLimit = 50,
+        usernameMin = 6, usernameMax = 50,
+        passwordMin = 8, passwordMax = 100,
+        nicknameMin = 1, nicknameMax = 100,
+        groupnameMin = 6, groupNameMax = 50,
+        pwdHashLen = 32, pwdSaltLen = 16,
         inputLimit = 500,
-        bufferSize = 2048,
-        pwdHashLen = 32,
-        pwdSaltLen = 16;
+        bufferSize = 2048;
 }
 
 class Utilities

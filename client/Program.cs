@@ -444,10 +444,17 @@ class Client
                 if(username != null)
                     WriteLine(username);
                 else
-                    username = IOHelper.ReadInput(MagicNumbers.usernameLimit, false);
+                    username = IOHelper.ReadInput(MagicNumbers.usernameMax, false);
 
                 if(username == null)
                     return false;
+                if(username.Length < MagicNumbers.usernameMin)
+                {
+                    WriteLine($" Error: Username must have at least {MagicNumbers.usernameMin} characters");
+                    username = null;
+                    ReadKey(true);
+                    continue;
+                }
 
                 cmdToSend = new(CommandType.CheckUsername, username);
                 stream.Write(EncodeString(Command.Serialize(cmdToSend)));
@@ -469,16 +476,23 @@ class Client
                 if(pwd != null)
                     WriteLine(new string('*', pwd.Length));
                 else
-                    pwd = IOHelper.ReadInput(MagicNumbers.passwordLimit, true);
+                    pwd = IOHelper.ReadInput(MagicNumbers.passwordMax, true);
 
                 if(pwd == null)
                     return false;
+                if(pwd.Length < MagicNumbers.passwordMin)
+                {
+                    WriteLine($" Error: Password must have at least {MagicNumbers.passwordMin} characters");
+                    pwd = null;
+                    ReadKey(true);
+                    continue;
+                }
 
                 Write(" Confirm password: ");
                 if(confirmPwd != null)
                     WriteLine(new string('*', confirmPwd.Length));
                 else
-                    confirmPwd = IOHelper.ReadInput(MagicNumbers.passwordLimit, true);
+                    confirmPwd = IOHelper.ReadInput(MagicNumbers.passwordMax, true);
 
                 if(confirmPwd == null)
                     return false;
@@ -492,10 +506,16 @@ class Client
                 }
 
                 Write(" Enter nickname (can be changed later): ");
-                string? nickname = IOHelper.ReadInput(MagicNumbers.nicknameLimit, false);
+                string? nickname = IOHelper.ReadInput(MagicNumbers.nicknameMax, false);
 
                 if(nickname == null)
                     return false;
+                if(nickname.Length < MagicNumbers.nicknameMin)
+                {
+                    WriteLine($" Error: Nickname must have at least {MagicNumbers.nicknameMin} characters");
+                    ReadKey(true);
+                    continue;
+                }
 
                 (byte[] pwdHash, byte[] salt) = HashPassword(pwd);
                 cmdToSend = new(CommandType.Register, $"{username}|{nickname}|{DecodeBytes(pwdHash)}|{DecodeBytes(salt)}");

@@ -46,8 +46,8 @@ static class DbHelper
         using (MySqlCommand createUsers = new(@$"
             CREATE TABLE Users (
                 UserID INT AUTO_INCREMENT PRIMARY KEY,
-                Username NVARCHAR({MagicNumbers.usernameLimit}) NOT NULL UNIQUE,
-                Nickname NVARCHAR({MagicNumbers.nicknameLimit}) NOT NULL,
+                Username NVARCHAR({MagicNumbers.usernameMax}) NOT NULL UNIQUE,
+                Nickname NVARCHAR({MagicNumbers.nicknameMax}) NOT NULL,
                 PasswordHash VARBINARY({MagicNumbers.pwdHashLen}) DEFAULT NULL,
                 Salt VARBINARY({MagicNumbers.pwdSaltLen}) DEFAULT NULL,
                 CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -59,7 +59,7 @@ static class DbHelper
         using (MySqlCommand createChatGroups = new(@$"
             CREATE TABLE ChatGroups (
                 GroupID INT AUTO_INCREMENT PRIMARY KEY,
-                GroupName NVARCHAR({MagicNumbers.groupNameLimit}) NOT NULL,
+                GroupName NVARCHAR({MagicNumbers.groupNameMax}) NOT NULL,
                 CreatedBy INT NOT NULL,
                 CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )", conn))
