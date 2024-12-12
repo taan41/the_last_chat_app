@@ -120,10 +120,16 @@ static class DbHelper
         }
     }
 
-    public static bool Register(string username, string nickname, byte[] pwdHash, byte[] salt, out string errorMessage)
+    public static bool Register(User user, out string errorMessage)
     {
         string query = "INSERT INTO Users (Username, Nickname, PasswordHash, Salt) VALUES (@username, @nickname, @pwdHash, @salt)";
         errorMessage = "";
+
+        if(user.PwdSet == null)
+        {
+            errorMessage = "Invalid user password";
+            return false;
+        }
 
         try
         {
@@ -131,10 +137,10 @@ static class DbHelper
             conn.Open();
 
             using MySqlCommand cmd = new(query, conn);
-            cmd.Parameters.AddWithValue("@username", username);
-            cmd.Parameters.AddWithValue("@nickname", nickname);
-            cmd.Parameters.AddWithValue("@pwdHash", pwdHash);
-            cmd.Parameters.AddWithValue("@salt", salt);
+            cmd.Parameters.AddWithValue("@username", user.Username);
+            cmd.Parameters.AddWithValue("@nickname", user.Nickname);
+            cmd.Parameters.AddWithValue("@pwdHash", user.PwdSet.PwdHash);
+            cmd.Parameters.AddWithValue("@salt", user.PwdSet.Salt);
 
             cmd.ExecuteNonQuery();
 
@@ -147,7 +153,7 @@ static class DbHelper
         }
     }
 
-    public static bool GetUserPwd(string username, ref byte[] pwdHash, ref byte[] salt, out string errorMessage)
+    public static PasswordSet? GetUserPwd(string username, out string errorMessage)
     {
         string query = "SELECT PasswordHash, Salt FROM Users WHERE Username = @username";
         errorMessage = "";
@@ -162,27 +168,27 @@ static class DbHelper
 
             using MySqlDataReader reader = cmd.ExecuteReader();
 
-            if(!reader.Read())
-            {
-                errorMessage = "User not found";
-                return false;
-            }
+            if(!reader.Read()) // Username not found
+                return null;
+
+            byte[] pwdHash = new byte[MagicNumbers.pwdHashLen];
+            byte[] salt = new byte[MagicNumbers.pwdSaltLen];
 
             reader.GetBytes("PasswordHash", 0, pwdHash, 0, MagicNumbers.pwdHashLen);
             reader.GetBytes("Salt", 0, salt, 0, MagicNumbers.pwdSaltLen);
 
-            return true;
+            return new(pwdHash, salt);
         }
         catch (MySqlException ex)
         {
             errorMessage = ex.Message;
-            return false;
+            return null;
         }
     }
 
-    public static User? Login(string username, string password, out string errorMessage)
+    public static User? Login(string username, out string errorMessage)
     {
-        string query = "SELECT PasswordHash, Salt, UserID, Username, Nickname FROM Users WHERE Username=@username";
+        string query = "SELECT UserID, Username, Nickname FROM Users WHERE Username=@username";
         errorMessage = "";
 
         try
@@ -195,24 +201,10 @@ static class DbHelper
 
             using MySqlDataReader reader = cmd.ExecuteReader();
 
-            if(!reader.Read())
-            {
-                errorMessage = "User not found";
+            if(!reader.Read()) // User not found
                 return null;
-            }
 
-            byte[] passwordHash = new byte[MagicNumbers.pwdHashLen];
-            byte[] salt = new byte[MagicNumbers.pwdSaltLen];
-            reader.GetBytes("PasswordHash", 0, passwordHash, 0, MagicNumbers.pwdHashLen);
-            reader.GetBytes("Salt", 0, salt, 0, MagicNumbers.pwdSaltLen);
-
-            if(Utilities.VerifyPassword(password, passwordHash, salt))
-                return new(reader.GetInt32("UserID"), reader.GetString("Username"), reader.GetString("Nickname"));
-            else
-            {
-                errorMessage = "Wrong password";
-                return null;
-            }
+            return new(reader.GetInt32("UserID"), reader.GetString("Username"), reader.GetString("Nickname"), null);
         }
         catch (MySqlException ex)
         {

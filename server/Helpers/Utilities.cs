@@ -42,4 +42,7 @@ class Utilities
         return pwdHash.SequenceEqual(storedPwdHash);
     }
 
+    public static bool VerifyPassword(string pwd, PasswordSet pwdSet)
+        => VerifyPassword(pwd, pwdSet.PwdHash, pwdSet.Salt);
+
 }

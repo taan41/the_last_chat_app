@@ -1,6 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
-using Org.BouncyCastle.Crypto.Parameters;
+
 using static System.Console;
 using static Utilities;
 
@@ -25,7 +25,7 @@ class Client
         {
             try
             {
-                ConnectServer(ref serverIP, ref port, ref stopProgram);
+                ConnectServerMenu(ref serverIP, ref port, ref stopProgram);
                 if(stopProgram)
                     return;
 
@@ -50,7 +50,7 @@ class Client
         }
     }
 
-    static void ConnectServer(ref string serverIP, ref int port, ref bool stopProgram)
+    static void ConnectServerMenu(ref string serverIP, ref int port, ref bool stopProgram)
     {
         string? input;
         while(true)
@@ -110,26 +110,19 @@ class Client
         {
             ClientHelper.ShowWelcomeMenu();
 
-            string errorMessage;
             switch(IOHelper.ReadInput(false))
             {
                 case "1":
-                    if(ClientHelper.Register(stream, out errorMessage))
-                    {
-                        IOHelper.WriteBorder();
-                        WriteLine(" Registered successfully");
-                    }
-                    else if(errorMessage.Length > 0)
-                        WriteLine($" Error: {errorMessage}");
-
-                    ReadKey(true);
+                    ClientHelper.Register(stream);
                     continue;
 
                 case "2":
-                    
+                    ClientHelper.Login(stream);
+                    continue;
 
                 case "0": case null:
                     WriteLine(" Shutting down client...");
+                    ClientHelper.SendDisconnect(stream);
                     stopProgram = true;
                     return;
 
@@ -401,9 +394,14 @@ class Client
     }
     */
 
-    private class ClientHelper
+    private static class ClientHelper
     {
-        public static bool CheckIPv4(string? ipAddress)
+        public static void SendDisconnect(NetworkStream stream)
+        {
+            stream.Write(EncodeString(Command.Serialize(new(CommandType.Disconnect, null))));
+        }
+
+        public static bool CheckIPv4(string ipAddress)
         {
             if(!IPAddress.TryParse(ipAddress, out _))
                 return false;
@@ -426,9 +424,8 @@ class Client
             return true;
         }
 
-        public static bool Register(NetworkStream stream, out string errorMessage)
+        public static void Register(NetworkStream stream)
         {
-            errorMessage = "";
             byte[] buffer = new byte[MagicNumbers.bufferSize];
             int bytesRead;
             string? username = null, pwd = null, confirmPwd = null;
@@ -438,16 +435,16 @@ class Client
             {
                 ShowWelcomeMenu();
                 WriteLine("1");
-                WriteLine();
+                IOHelper.WriteBorder();
 
-                Write(" Enter username: ");
+                Write(" Enter username   : ");
                 if(username != null)
                     WriteLine(username);
                 else
                     username = IOHelper.ReadInput(MagicNumbers.usernameMax, false);
 
                 if(username == null)
-                    return false;
+                    return;
                 if(username.Length < MagicNumbers.usernameMin)
                 {
                     WriteLine($" Error: Username must have at least {MagicNumbers.usernameMin} characters");
@@ -461,25 +458,21 @@ class Client
 
                 bytesRead = stream.Read(buffer);
                 receivedCmd = Command.Deserialize(DecodeBytes(buffer, 0, bytesRead));
-                if(receivedCmd == null)
+
+                if(!CommandHandler(receivedCmd, CommandType.CheckUsername))
                 {
-                    errorMessage = "Received invalid command";
-                    return false;
-                }
-                if(receivedCmd.CommandType == CommandType.Error)
-                {
-                    errorMessage = receivedCmd.Payload;
-                    return false;
+                    username = null;
+                    continue;
                 }
 
-                Write(" Enter password: ");
+                Write(" Enter password   : ");
                 if(pwd != null)
                     WriteLine(new string('*', pwd.Length));
                 else
                     pwd = IOHelper.ReadInput(MagicNumbers.passwordMax, true);
 
                 if(pwd == null)
-                    return false;
+                    return;
                 if(pwd.Length < MagicNumbers.passwordMin)
                 {
                     WriteLine($" Error: Password must have at least {MagicNumbers.passwordMin} characters");
@@ -488,14 +481,14 @@ class Client
                     continue;
                 }
 
-                Write(" Confirm password: ");
+                Write(" Confirm password : ");
                 if(confirmPwd != null)
                     WriteLine(new string('*', confirmPwd.Length));
                 else
                     confirmPwd = IOHelper.ReadInput(MagicNumbers.passwordMax, true);
 
                 if(confirmPwd == null)
-                    return false;
+                    return;
                 if(!confirmPwd.Equals(pwd))
                 {
                     WriteLine(" Error: Password confirmation failed");
@@ -505,11 +498,11 @@ class Client
                     continue;
                 }
 
-                Write(" Enter nickname (can be changed later): ");
+                Write(" Enter nickname   : ");
                 string? nickname = IOHelper.ReadInput(MagicNumbers.nicknameMax, false);
 
                 if(nickname == null)
-                    return false;
+                    return;
                 if(nickname.Length < MagicNumbers.nicknameMin)
                 {
                     WriteLine($" Error: Nickname must have at least {MagicNumbers.nicknameMin} characters");
@@ -517,30 +510,118 @@ class Client
                     continue;
                 }
 
-                (byte[] pwdHash, byte[] salt) = HashPassword(pwd);
-                cmdToSend = new(CommandType.Register, $"{username}|{nickname}|{DecodeBytes(pwdHash)}|{DecodeBytes(salt)}");
+                User registeredUser = new(null, username, nickname, HashPassword(pwd));
+
+                cmdToSend = new(CommandType.Register, User.Serialize(registeredUser));
                 stream.Write(EncodeString(Command.Serialize(cmdToSend)));
 
                 bytesRead = stream.Read(buffer);
                 receivedCmd = Command.Deserialize(DecodeBytes(buffer, 0, bytesRead));
-                if(receivedCmd == null)
+
+                if(CommandHandler(receivedCmd, CommandType.Register))
                 {
-                    errorMessage = "Received invalid command";
-                    return false;
-                }
-                if(receivedCmd.CommandType == CommandType.Error)
-                {
-                    errorMessage = receivedCmd.Payload;
-                    return false;
+                    IOHelper.WriteBorder();
+                    WriteLine(" Registered successfully!");
                 }
 
-                return true;
+                ReadKey(true);
+                return;
+            }
+        }
+
+        public static User? Login(NetworkStream stream)
+        {
+            byte[] buffer = new byte[MagicNumbers.bufferSize];
+            int bytesRead;
+            Command? receivedCmd, cmdToSend;
+            PasswordSet? pwdSet;
+            
+            while(true)
+            {
+                ShowWelcomeMenu();
+                WriteLine("2");
+                IOHelper.WriteBorder();
+
+                Write(" Enter username: ");
+                string? username = IOHelper.ReadInput(MagicNumbers.usernameMax, false);
+                if(username == null)
+                    return null;
+                if(username.Length < MagicNumbers.usernameMin)
+                {
+                    WriteLine($" Error: Username must have at least {MagicNumbers.usernameMin} characters");
+                    ReadKey(true);
+                    continue;
+                }
+
+                cmdToSend = new(CommandType.RequestUserPwd, username);
+                stream.Write(EncodeString(Command.Serialize(cmdToSend)));
+
+                bytesRead = stream.Read(buffer);
+                receivedCmd = Command.Deserialize(DecodeBytes(buffer, 0, bytesRead));
+
+                if(CommandHandler(receivedCmd, CommandType.RequestUserPwd))
+                {
+                    pwdSet = PasswordSet.Deserialize(receivedCmd!.Payload);
+                    if(pwdSet == null)
+                    {
+                        WriteLine(" Error: Received invalid password");
+                        ReadKey(true);
+                        continue;
+                    }
+                }
+                else continue;
+
+                Write(" Enter password: ");
+                string? pwd = IOHelper.ReadInput(MagicNumbers.passwordMax, true);
+
+                if(pwd == null)
+                    return null;
+                if(pwd.Length < MagicNumbers.passwordMin)
+                {
+                    WriteLine($" Error: Password must have at least {MagicNumbers.passwordMin} characters");
+                    ReadKey(true);
+                    continue;
+                }
+
+                if(VerifyPassword(pwd, pwdSet))
+                {
+                    cmdToSend = new(CommandType.Login, username);
+                    stream.Write(EncodeString(Command.Serialize(cmdToSend)));
+
+                    bytesRead = stream.Read(buffer);
+                    receivedCmd = Command.Deserialize(DecodeBytes(buffer, 0, bytesRead));
+
+                    if(CommandHandler(receivedCmd, CommandType.Login))
+                    {
+                        User? user = User.Deserialize(receivedCmd!.Payload);
+
+                        if(user == null)
+                        {
+                            WriteLine(" Error: Received invalid user data");
+                            ReadKey(true);
+                            return null;
+                        }
+                        else
+                        {
+                            IOHelper.WriteBorder();
+                            WriteLine(" Logged in successfully!");
+                            ReadKey(true);
+                            return user;
+                        }
+                    }
+                }
+                else
+                {
+                    WriteLine(" Error: Wrong password");
+                    ReadKey(true);
+                    continue;
+                }
             }
         }
 
         public static void ShowConnectMenu(string serverIP, int port)
         {
-            Clear();
+            // Clear();
             IOHelper.WriteHeader("Zelo");
             WriteLine($" Server's IP: {serverIP}");
             WriteLine($" Server's port: {port}");

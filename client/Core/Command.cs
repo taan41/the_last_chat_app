@@ -3,10 +3,13 @@ using System.Text.Json;
 enum CommandType
 {
     Empty, Error, RequestAES,
-    CheckUsername, Register, RequestUserPwd, Login, Logout, SetNickname,
+    CheckUsername, Register,
+    RequestUserPwd, Login, Logout,
+    SetNickname,
     RequestUserList, UserAsPartner, DeletePartner,
     RequestGroupList, CreateGroup, DeleteGroup, JoinGroup, LeaveGroup,
-    Message
+    Message,
+    Disconnect
 }
 
 [Serializable]
@@ -17,11 +20,20 @@ class Command
 
     public Command() {}
 
-    public Command(CommandType commandType, string? payLoad)
+    public Command(CommandType commandType, string? payload)
     {
         CommandType = commandType;
-        Payload = payLoad ?? "";
+        Payload = payload ?? "";
     }
+
+    public void Set(CommandType cmdType, string? payload)
+    {
+        CommandType = cmdType;
+        Payload = payload ?? "";
+    }
+
+    public void SetError(string? payload)
+        => Set(CommandType.Error, payload);
     
     public static string Serialize(Command command) =>
         JsonSerializer.Serialize(command);

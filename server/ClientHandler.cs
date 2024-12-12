@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.Sockets;
-
 using static Utilities;
 
 class ClientHandler
@@ -30,8 +29,7 @@ class ClientHandler
         Memory<byte> memory = new(buffer);
         int bytesRead;
 
-        Command? receivedCmd;
-        Command cmdToSend = new();
+        Command? receivedCmd, cmdToSend = new();
 
         try
         {
@@ -42,55 +40,40 @@ class ClientHandler
                     continue;
 
                 receivedCmd = Command.Deserialize(DecodeBytes(buffer, 0, bytesRead));
-                if(receivedCmd == null)
-                {
-                    LogManager.AddLog("Receive invalid command while handling client");
-                    return;
-                }
 
-                string? errorMessage = string.Empty;
-                switch (receivedCmd.CommandType)
+                switch (receivedCmd?.CommandType)
                 {
                     case CommandType.CheckUsername:
-                        if(!DbHelper.CheckUsername(receivedCmd.Payload, out errorMessage))
-                        {
-                            if(errorMessage.Length > 0)
-                                LogManager.AddLog($"Error while checking username: {errorMessage}");
-                            else
-                                errorMessage = "Unavailable username";
-                        }
+                        CheckUsername(receivedCmd, ref cmdToSend);
                         break;
 
                     case CommandType.Register:
-                        if(Register(receivedCmd.Payload, out string registeredUsername, out errorMessage))
-                            LogManager.AddLog($"{endPoint} registered with username '{registeredUsername}'");
+                        Register(receivedCmd, ref cmdToSend);
                         break;
 
                     case CommandType.RequestUserPwd:
-                        byte[] pwdHash = new byte[MagicNumbers.pwdHashLen];
-                        byte[] salt = new byte[MagicNumbers.pwdSaltLen];
-
-                        if(DbHelper.GetUserPwd(receivedCmd.Payload, ref pwdHash, ref salt, out errorMessage))
-                            cmdToSend.Payload = $"{DecodeBytes(pwdHash)}|{DecodeBytes(salt)}";
+                        RequestUserPwd(receivedCmd, ref cmdToSend);
                         break;
 
                     case CommandType.Login:
-                        if((user = Login(receivedCmd.Payload, out errorMessage)) != null)
-                            LogManager.AddLog($"{endPoint} logged in as '{user.Username}'");
+                        user = Login(receivedCmd, ref cmdToSend);
                         break;
+
+                    case CommandType.Logout:
+                        user = null;
+                        break;
+
+                    case CommandType.Disconnect:
+                        stream.Close();
+                        client.Close();
+                        LogManager.AddLog($"Client disconnected: {endPoint}");
+                        return;
 
                     default:
-                        errorMessage = "Unknown command";
+                        cmdToSend.SetError("Server received invalid command");
+                        LogManager.AddLog($"Error from {endPoint}: Invalid command");
                         break;
                 }
-
-                if(!string.IsNullOrWhiteSpace(errorMessage))
-                {
-                    LogManager.AddLog(errorMessage);
-                    cmdToSend = new(CommandType.Error, errorMessage);
-                }
-                else
-                    cmdToSend.CommandType = receivedCmd.CommandType;
 
                 await stream.WriteAsync(EncodeString(Command.Serialize(cmdToSend)), token);
             }
@@ -102,29 +85,92 @@ class ClientHandler
         }
     }
 
-    private static bool Register(string data, out string username, out string errorMessage)
+    private bool CheckUsername(Command receivedCmd, ref Command cmdToSend)
     {
-        username = "";
-
-        string[] parts = data.Split('|');
-        if(parts.Length != 4)
+        if(DbHelper.CheckUsername(receivedCmd.Payload, out string errorMessage))
         {
-            errorMessage = "Invalid data while registering";
+            cmdToSend.Set(receivedCmd.CommandType, null);
+            return true;
+        }
+        else if(errorMessage.Length > 0)
+        {
+            cmdToSend.SetError("Database error while checking username");
+            LogManager.AddLog($"DB error from {endPoint} checking username: {errorMessage}");
+        }
+        else
+            cmdToSend.SetError("Unavailable username");
+
+        return false;
+    }
+
+    private bool Register(Command receivedCmd, ref Command cmdToSend)
+    {
+        User? registeredUser = User.Deserialize(receivedCmd.Payload);
+        if(registeredUser == null)
+        {
+            cmdToSend.SetError("Invalid user data");
+            LogManager.AddLog($"Error from {endPoint} registering: Invalid user data");
             return false;
         }
 
-        return DbHelper.Register(username = parts[0], parts[1], EncodeString(parts[2]), EncodeString(parts[3]), out errorMessage);
+        if(DbHelper.Register(registeredUser, out string errorMessage))
+        {
+            cmdToSend.Set(receivedCmd.CommandType, null);
+            LogManager.AddLog($"{endPoint} registered with username '{registeredUser.Username}'");
+            return true;
+        }
+        else if(errorMessage.Length > 0)
+        {
+            cmdToSend.SetError("Database error while registering");
+            LogManager.AddLog($"DB error from {endPoint} registering: {errorMessage}");
+        }
+        else
+            cmdToSend.SetError("Registered unsuccessfully");
+
+        return false;
     }
 
-    private static User? Login(string data, out string errorMessage)
+    private bool RequestUserPwd(Command receivedCmd, ref Command cmdToSend)
     {
-        string[] parts = data.Split('|');
-        if(parts.Length != 2)
+        PasswordSet? pwdSet = DbHelper.GetUserPwd(receivedCmd.Payload, out string errorMessage);
+
+        if(pwdSet != null)
         {
-            errorMessage = "Invalid data while logging in";
-            return null;
+            cmdToSend.Set(receivedCmd.CommandType, PasswordSet.Serialize(pwdSet));
+            return true;
+        }
+        else if(errorMessage.Length > 0)
+        {
+            cmdToSend.SetError("Database error while getting password");
+            LogManager.AddLog($"DB error from {endPoint} getting pwd for '{receivedCmd.Payload}': {errorMessage}");
+        }
+        else
+            cmdToSend.SetError("No user found");
+
+        return false;
+    }
+
+    private User? Login(Command receivedCmd, ref Command cmdToSend)
+    {
+        User? requestedUser;
+        if((requestedUser = DbHelper.Login(receivedCmd.Payload, out string errorMessage)) != null)
+        {
+            cmdToSend.Set(receivedCmd.CommandType, User.Serialize(requestedUser));
+            LogManager.AddLog($"{endPoint} logged in as '{requestedUser}'");
+            return requestedUser;
+        }
+        else if(errorMessage.Length > 0)
+        {
+            cmdToSend.SetError("Database error while trying to login");
+            LogManager.AddLog($"DB error from {endPoint} trying to login as '{receivedCmd.Payload}': {errorMessage}");
+        }
+        else
+        {
+            cmdToSend.SetError("Logged in unsuccessfully");
+            LogManager.AddLog($"{endPoint} failed to login as '{receivedCmd.Payload}'");
         }
 
-        return DbHelper.Login(parts[0], parts[1], out errorMessage);
+        return null;
     }
+
 }

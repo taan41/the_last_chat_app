@@ -22,8 +22,35 @@ class Utilities
 
     public static byte[] EncodeString(string content) => Encoding.Unicode.GetBytes(content);
 
+    // Generic command handler
+    public static bool CommandHandler(Command? cmd, CommandType expectedCmdType)
+    {
+        if(cmd == null)
+        {
+            Console.WriteLine(" Error: Received invalid command");
+            Console.ReadKey(true);
+            return false;
+        }
+
+        switch(cmd.CommandType)
+        {
+            case var value when value == expectedCmdType:
+                return true;
+
+            case CommandType.Error:
+                Console.WriteLine($" Error: {cmd.Payload}");
+                Console.ReadKey(true);
+                return false;
+
+            default:
+                Console.WriteLine(" Error: Received unknown command");
+                Console.ReadKey(true);
+                return false;
+        }
+    }
+
     // Hash & verify password
-    public static (byte[] PwdHash, byte[] Salt) HashPassword(string pwd)
+    public static PasswordSet HashPassword(string pwd)
     {
         byte[] salt = new byte[MagicNumbers.pwdSaltLen];
         RandomNumberGenerator.Fill(salt);
@@ -31,7 +58,7 @@ class Utilities
         using var pbkdf2 = new Rfc2898DeriveBytes(EncodeString(pwd), salt, 5000, HashAlgorithmName.SHA256);
         byte[] pwdHash = pbkdf2.GetBytes(MagicNumbers.pwdHashLen);
 
-        return (pwdHash, salt);
+        return new(pwdHash, salt);
     }
 
     public static bool VerifyPassword(string pwd, byte[] storedPwdHash, byte[] storedSalt)
@@ -42,4 +69,6 @@ class Utilities
         return pwdHash.SequenceEqual(storedPwdHash);
     }
 
+    public static bool VerifyPassword(string pwd, PasswordSet pwdSet)
+        => VerifyPassword(pwd, pwdSet.PwdHash, pwdSet.Salt);
 }

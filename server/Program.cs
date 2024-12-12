@@ -60,7 +60,7 @@ class Server
 
         while(!done)
         {
-            Clear();
+            // Clear();
             IOHelper.WriteHeader("Zelo Server Control Center");
             WriteLine(" MySql database info:");
 
