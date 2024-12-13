@@ -17,7 +17,7 @@ class ChatGroupHandler(ChatGroup? _chatGroup)
         {
             connectedClients.Add(client);
             if(chatGroup != null)
-                chatGroup.ConnectedNum = connectedClients.Count;
+                chatGroup.OnlineCount = connectedClients.Count;
         }
     }
 
@@ -27,7 +27,7 @@ class ChatGroupHandler(ChatGroup? _chatGroup)
         {
             connectedClients.Remove(client);
             if(chatGroup != null)
-                chatGroup.ConnectedNum = connectedClients.Count;
+                chatGroup.OnlineCount = connectedClients.Count;
         }
     }
 }

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Text.Json;
 using static Utilities;
 
 class ClientHandler
@@ -74,6 +75,18 @@ class ClientHandler
                         (_, cmdToSend, user) = await ChangePassword(receivedCmd, user);
                         break;
 
+                    case CommandType.RequestCreatedGroups:
+                        (_, cmdToSend) = await RequestCreatedGroups(receivedCmd);
+                        break;
+
+                    case CommandType.CreateGroup:
+                        (_, cmdToSend) = await CreateGroup(receivedCmd);
+                        break;
+
+                    case CommandType.RequestGroupList:
+                        (_, cmdToSend) = await RequestAllGroupList(receivedCmd);
+                        break;
+
                     case CommandType.Disconnect:
                         stream.Close();
                         client.Close();
@@ -120,11 +133,10 @@ class ClientHandler
         Command cmdToSend = new();
 
         User? registeredUser = User.Deserialize(receivedCmd.Payload);
-
         if(registeredUser == null)
         {
-            cmdToSend.SetError("Invalid user data");
-            LogManager.AddLog($"Error from {endPoint} registering: Invalid user data");
+            cmdToSend.SetError("Server-side error");
+            LogManager.AddLog($"Error from {endPoint} trying to register: Invalid user data");
             return (false, cmdToSend);
         }
 
@@ -133,7 +145,7 @@ class ClientHandler
         if(success)
         {
             cmdToSend.Set(receivedCmd.CommandType, null);
-            LogManager.AddLog($"{endPoint} registered with username '{registeredUser.Username}'");
+            LogManager.AddLog($"{endPoint} registered '{registeredUser}'");
         }
         else 
             Helper.DBErrorHandler(errorMessage, endPoint, "register", ref cmdToSend);
@@ -243,10 +255,69 @@ class ClientHandler
             }
             else
             {
-                Helper.DBErrorHandler(errorMessage, endPoint, "change nickname", ref cmdToSend);
+                Helper.DBErrorHandler(errorMessage, endPoint, "change password", ref cmdToSend);
                 return (success, cmdToSend, oldUser);
             }
         }
+    }
+
+    private async Task<(bool success, Command cmdToSend)> RequestCreatedGroups(Command receivedCmd)
+    {
+        Command cmdToSend = new();
+
+        (List<ChatGroup>? groups, string errorMessage) = await DbHelper.GetChatGroupByCreator(Convert.ToInt32(receivedCmd.Payload));
+
+        if(groups != null)
+        {
+            cmdToSend.Set(receivedCmd.CommandType, JsonSerializer.Serialize(groups));
+            return (true, cmdToSend);
+        }
+        else 
+            Helper.DBErrorHandler(errorMessage, endPoint, "request created group list", ref cmdToSend);
+
+        return (false, cmdToSend);
+    }
+
+    private async Task<(bool success, Command cmdToSend)> CreateGroup(Command receivedCmd)
+    {
+        Command cmdToSend = new();
+
+        ChatGroup? chatGroup = ChatGroup.Deserialize(receivedCmd.Payload);
+        if(chatGroup == null)
+        {
+            cmdToSend.SetError("Server-side error");
+            LogManager.AddLog($"Error from {endPoint} trying to create chat group: Invalid chat group data");
+            return (false, cmdToSend);
+        }
+
+        (bool success, string errorMessage) = await DbHelper.AddChatGroup(chatGroup);
+
+        if(success)
+        {
+            cmdToSend.Set(receivedCmd.CommandType, null);
+            LogManager.AddLog($"{endPoint} created chat group '{chatGroup.ToString(false)}'");
+        }
+        else 
+            Helper.DBErrorHandler(errorMessage, endPoint, "create chat group", ref cmdToSend);
+
+        return (success, cmdToSend);
+    }
+
+    private async Task<(bool success, Command cmdToSend)> RequestAllGroupList(Command receivedCmd)
+    {
+        Command cmdToSend = new();
+
+        (List<ChatGroup>? groups, string errorMessage) = await DbHelper.GetAllChatGroup();
+
+        if(groups != null)
+        {
+            cmdToSend.Set(receivedCmd.CommandType, JsonSerializer.Serialize(groups));
+            return (true, cmdToSend);
+        }
+        else 
+            Helper.DBErrorHandler(errorMessage, endPoint, "request group list", ref cmdToSend);
+
+        return (false, cmdToSend);
     }
 
 

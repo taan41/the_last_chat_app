@@ -1,4 +1,5 @@
 using System.Data;
+using System.Data.SqlTypes;
 using MySql.Data.MySqlClient;
 using Org.BouncyCastle.OpenSsl;
 
@@ -62,7 +63,8 @@ static class DbHelper
                 GroupID INT AUTO_INCREMENT PRIMARY KEY,
                 GroupName NVARCHAR({MagicNumbers.groupNameMax}) NOT NULL,
                 CreatorID INT DEFAULT NULL,
-                CreatedTime TIMESTAMP DEFAULT CURRENT_TIMESTAMP, 
+                CreatedTime TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                OnlineCount INT NOT NULL,
                 FOREIGN KEY (CreatorID) REFERENCES Users(UserID) ON DELETE SET NULL
             )", conn))
         {
@@ -99,7 +101,6 @@ static class DbHelper
     public static async Task<(bool success, string errorMessage)> CheckUsername(string username)
     {
         string query = "SELECT * FROM Users WHERE Username = @username";
-        string errorMessage;
 
         try
         {
@@ -111,31 +112,23 @@ static class DbHelper
 
             using var reader = await cmd.ExecuteReaderAsync();
 
-            if (! await reader.ReadAsync()) // No same username found
+            if (!reader.HasRows) // No same username found
                 return (true, "");
             else
-            {
-                errorMessage = "Unavailable username";
-                return (false, errorMessage);
-            }
+                return (false, "Unavailable username");
         }
         catch (MySqlException ex)
         {
-            errorMessage = ex.Message;
-            return (false, errorMessage);
+            return (false, ex.Message);
         }
     }
 
     public static async Task<(bool success, string errorMessage)> AddUser(User user)
     {
         string query = "INSERT INTO Users (Username, Nickname, PasswordHash, Salt) VALUES (@username, @nickname, @pwdHash, @salt)";
-        string errorMessage;
 
         if (user.PwdSet == null)
-        {
-            errorMessage = "Null user password";
-            return (false, errorMessage);
-        }
+            return (false, "Null user password");
 
         try
         {
@@ -154,15 +147,14 @@ static class DbHelper
         }
         catch (MySqlException ex)
         {
-            errorMessage = ex.Message;
-            return (false, errorMessage);
+            return (false, ex.Message);
         }
     }
 
     public static async Task<(bool success, string errorMessage, User? requestedUser)> GetUser(string username, bool getPwd)
     {
         string query = "SELECT UserID, Username, Nickname, PasswordHash, Salt FROM Users WHERE Username=@username";
-        string errorMessage;
+
         try
         {
             using MySqlConnection conn = new(connectionString);
@@ -174,10 +166,7 @@ static class DbHelper
             using var reader = await cmd.ExecuteReaderAsync();
 
             if (! await reader.ReadAsync()) // User not found
-            {
-                errorMessage = $"No user with username '{username}' found";
-                return (false, errorMessage, null);
-            }
+                return (false, $"No user with username '{username}' found", null);
 
             if (getPwd)
             {
@@ -208,8 +197,7 @@ static class DbHelper
         }
         catch (MySqlException ex)
         {
-            errorMessage = ex.Message;
-            return (false, errorMessage, null);
+            return (false, ex.Message, null);
         }
     }
     
@@ -270,13 +258,8 @@ static class DbHelper
 
     public static async Task<(bool success, string errorMessage)> UpdateUser(User updatedUser)
     {
-        string errorMessage;
-
         if (updatedUser.UID == null || updatedUser.PwdSet == null)
-        {
-            errorMessage = "Null UID/Password Set";
-            return (false, errorMessage);
-        }
+            return (false, "Null UID/Password Set");
 
         string query = "UPDATE Users SET Nickname = @newNickname, PasswordHash = @newPwdHash, Salt = @newSalt WHERE UserID = @userID";
 
@@ -297,15 +280,13 @@ static class DbHelper
         }
         catch (MySqlException ex)
         {
-            errorMessage = ex.Message;
-            return (false, errorMessage);
+            return (false, ex.Message);
         }
     }
 
     public static async Task<(bool success, string errorMessage)> AddChatGroup(ChatGroup chatGroup)
     {
-        string query = "INSERT INTO ChatGroups (GroupName, CreatorID) VALUES (@groupName, @creatorID)";
-        string errorMessage;
+        string query = "INSERT INTO ChatGroups (GroupName, CreatorID, OnlineCount) VALUES (@groupName, @creatorID, @onlineCount)";
 
         try
         {
@@ -315,6 +296,7 @@ static class DbHelper
             using MySqlCommand cmd = new(query, conn);
             cmd.Parameters.AddWithValue("@groupName", chatGroup.GroupName);
             cmd.Parameters.AddWithValue("@creatorID", chatGroup.CreatorID);
+            cmd.Parameters.AddWithValue("@onlineCount", chatGroup.OnlineCount);
 
             await cmd.ExecuteNonQueryAsync();
 
@@ -322,15 +304,13 @@ static class DbHelper
         }
         catch (MySqlException ex)
         {
-            errorMessage = ex.Message;
-            return (false, errorMessage);
+            return (false, ex.Message);
         }
     }
 
     public static async Task<(bool success, string errorMessage, ChatGroup? requestedGroup)> GetChatGroup(int groupID)
     {
-        string query = "SELECT GroupName, CreatorID, CreatedTime FROM ChatGroups WHERE GroupID = @groupID";
-        string errorMessage;
+        string query = "SELECT GroupName, CreatorID, CreatedTime, OnlineCount FROM ChatGroups WHERE GroupID = @groupID";
 
         try
         {
@@ -342,28 +322,25 @@ static class DbHelper
 
             using var reader = await cmd.ExecuteReaderAsync();
 
-            if (! await reader.ReadAsync()) // User not found
-            {
-                errorMessage = $"No chat group with ID '{groupID}' found";
-                return (false, errorMessage, null);
-            }
+            if (! await reader.ReadAsync()) // Chat group not found
+                return (false, $"No chat group with ID '{groupID}' found", null);
 
             return (true, "", new(reader.GetString("GroupName"), reader.GetInt32("CreatorID"))
             {
                 GroupID = groupID,
-                CreatedTime = reader.GetDateTime("CreatedTime")
+                CreatedTime = reader.GetDateTime("CreatedTime"),
+                OnlineCount = reader.GetInt32("OnlineCount")
             });
         }
         catch (MySqlException ex)
         {
-            errorMessage = ex.Message;
-            return (false, errorMessage, null);
+            return (false, ex.Message, null);
         }
     }
     
     public static async Task<(List<ChatGroup>? groups, string errorMessage)> GetAllChatGroup()
     {
-        string query = "SELECT GroupID, GroupName, CreatorID, CreatedTime FROM ChatGroups ORDER BY GroupID";
+        string query = "SELECT GroupID, GroupName, CreatorID, CreatedTime, OnlineCount FROM ChatGroups ORDER BY GroupID";
 
         List<ChatGroup> groups = [];
         
@@ -377,10 +354,46 @@ static class DbHelper
             using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
-                groups.Add(new(reader.GetString("GroupName"), reader.GetInt32("CreatorID"))
+                groups.Add(new()
+                {
+                    GroupName = reader.GetString("GroupName"),
+                    GroupID = reader.GetInt32("GroupID"),
+                    CreatorID = reader.IsDBNullAsync(reader.GetOrdinal("CreatorID")).Result ? null : reader.GetInt32("CreatorID"),
+                    CreatedTime = reader.GetDateTime("CreatedTime"),
+                    OnlineCount = reader.GetInt32("OnlineCount")
+                });
+            }
+
+            return (groups, "");
+        }
+        catch (MySqlException ex)
+        {
+            return (null, ex.Message);
+        }
+    }
+    
+    public static async Task<(List<ChatGroup>? groups, string errorMessage)> GetChatGroupByCreator(int creatorID)
+    {
+        string query = "SELECT GroupID, GroupName, CreatedTime, OnlineCount FROM ChatGroups WHERE CreatorID = @creatorID ORDER BY GroupID";
+
+        List<ChatGroup> groups = [];
+        
+        try
+        {
+            using MySqlConnection conn = new(connectionString);
+            await conn.OpenAsync();
+
+            using MySqlCommand cmd = new(query, conn);
+            cmd.Parameters.AddWithValue("@creatorID", creatorID);
+            
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                groups.Add(new(reader.GetString("GroupName"), creatorID)
                 {
                     GroupID = reader.GetInt32("GroupID"),
-                    CreatedTime = reader.GetDateTime("CreatedTime")
+                    CreatedTime = reader.GetDateTime("CreatedTime"),
+                    OnlineCount = reader.GetInt32("OnlineCount")
                 });
             }
 
@@ -394,15 +407,10 @@ static class DbHelper
 
     public static async Task<(bool success, string errorMessage)> UpdateChatGroup(ChatGroup updatedGroup)
     {
-        string errorMessage;
-
         if (updatedGroup.GroupID == null)
-        {
-            errorMessage = "Null GroupID";
-            return (false, errorMessage);
-        }
+            return (false, "Null GroupID");
 
-        string query = "UPDATE ChatGroups SET GroupName = @newGroupName WHERE GroupID = @groupID";
+        string query = "UPDATE ChatGroups SET GroupName = @newGroupName, OnlineCount = @onlineCount WHERE GroupID = @groupID";
 
         try
         {
@@ -411,6 +419,7 @@ static class DbHelper
 
             using MySqlCommand cmd = new(query, conn);
             cmd.Parameters.AddWithValue("@newGroupName", updatedGroup.GroupName);
+            cmd.Parameters.AddWithValue("@onlineCount", updatedGroup.OnlineCount);
             cmd.Parameters.AddWithValue("@groupID", updatedGroup.GroupID);
 
             await cmd.ExecuteNonQueryAsync();
@@ -419,8 +428,7 @@ static class DbHelper
         }
         catch (MySqlException ex)
         {
-            errorMessage = ex.Message;
-            return (false, errorMessage);
+            return (false, ex.Message);
         }
 
     }
@@ -428,7 +436,6 @@ static class DbHelper
     public static async Task<(bool success, string errorMessage)> DeleteChatGroup(int groupID)
     {
         string query = "DELETE FROM ChatGroups WHERE GroupID = @groupID";
-        string errorMessage;
 
         try
         {
@@ -444,15 +451,13 @@ static class DbHelper
         }
         catch (MySqlException ex)
         {
-            errorMessage = ex.Message;
-            return (false, errorMessage);
+            return (false, ex.Message);
         }
     }
 
     public static async Task<(bool success, string errorMessage)> SavePrivateMessage(Message message)
     {
         string query = "INSERT INTO Messages (SenderID, ReceiverID, MessageText) VALUES (@senderID, @receiverID, @message)";
-        string errorMessage;
 
         try
         {    
@@ -469,15 +474,13 @@ static class DbHelper
         }
         catch (MySqlException ex)
         {
-            errorMessage = ex.Message;
-            return (false, errorMessage);
+            return (false, ex.Message);
         }
     }
 
     public static async Task<(bool success, string errorMessage)> SaveGroupMessage(Message message)
     {
         string query = "INSERT INTO Messages (SenderID, GroupID, MessageText) VALUES (@senderID, @groupID, @message)";
-        string errorMessage;
 
         try
         {    
@@ -494,8 +497,7 @@ static class DbHelper
         }
         catch (MySqlException ex)
         {
-            errorMessage = ex.Message;
-            return (false, errorMessage);
+            return (false, ex.Message);
         }
     }
 
@@ -584,7 +586,6 @@ static class DbHelper
     public static async Task<(bool success, string errorMessage)> AddLog(string logContent)
     {
         string query = "INSERT INTO ActivityLog (Content) VALUES (@content)";
-        string errorMessage;
 
         try
         {    
@@ -599,8 +600,7 @@ static class DbHelper
         }
         catch (MySqlException ex)
         {
-            errorMessage = ex.Message;
-            return (false, errorMessage);
+            return (false, ex.Message);
         }
     }
     

@@ -7,7 +7,8 @@ enum CommandType
     RequestUserPwd, Login, Logout,
     ChangeNickname, ChangePassword,
     RequestUserList, UserAsPartner, DeletePartner,
-    RequestGroupList, CreateGroup, DeleteGroup, JoinGroup, LeaveGroup,
+    RequestCreatedGroups, CreateGroup, DeleteGroup,
+    RequestGroupList, JoinGroup, LeaveGroup,
     Message,
     Disconnect
 }

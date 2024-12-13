@@ -187,6 +187,7 @@ class Client
                     continue;
 
                 case "2":
+                    ManageGroupMenu(stream, ref loggedInUser);
                     continue;
 
                 case "0": case null:
@@ -243,6 +244,68 @@ class Client
 
                 default:
                     continue;
+            }
+        }
+    }
+
+    static void ManageGroupMenu(NetworkStream stream, ref User loggedInUser)
+    {
+        byte[] buffer = new byte[MagicNumbers.bufferSize];
+        Command cmdToSend = new(CommandType.RequestCreatedGroups, loggedInUser.UID.ToString());
+        List<ChatGroup>? groups;
+
+        if (Helper.CommandHandler.Stream(stream, ref buffer, cmdToSend, out Command receivedCmd))
+        {
+            groups = JsonSerializer.Deserialize<List<ChatGroup>>(receivedCmd.Payload);
+
+            if (groups == null)
+            {
+                WriteLine(" Error: Received null list");
+                ReadKey(true);
+                return;
+            }
+        }
+        else return;
+
+        int curPage = 0, maxPage = groups.Count / 10;
+        while (true)
+        {
+            Helper.ShowMenu.ManageGroupMenu(groups, curPage);
+
+            switch (IOHelper.ReadInput(false))
+            {
+                case "1":
+                    Helper.ClientAction.CreateChatGroup(stream, loggedInUser, groups, curPage);
+                    break;
+
+                case "8":
+                    if (curPage > 0)
+                        curPage--;
+                    continue;
+
+                case "9":
+                    if (curPage < maxPage)
+                        curPage++;
+                    continue;
+
+                case "0": case null:
+                    return;
+
+                default:
+                    continue;
+            }
+
+            cmdToSend.Set(CommandType.RequestCreatedGroups, loggedInUser.UID.ToString());
+            if (Helper.CommandHandler.Stream(stream, ref buffer, cmdToSend, out receivedCmd))
+            {
+                groups = JsonSerializer.Deserialize<List<ChatGroup>>(receivedCmd.Payload);
+
+                if (groups == null)
+                {
+                    WriteLine(" Error: Received null list");
+                    ReadKey(true);
+                    return;
+                }
             }
         }
     }
@@ -440,7 +503,7 @@ class Client
                     ShowMenu.WelcomeMenu();
                     WriteLine("1");
                     IOHelper.WriteBorder();
-                    WriteLine(" Press ESC to cancel");
+                    WriteLine(" < Press ESC to cancel >");
 
                     Write(" Enter username   : ");
                     if (username.Length > 0)
@@ -531,7 +594,7 @@ class Client
                     ShowMenu.WelcomeMenu();
                     WriteLine("2");
                     IOHelper.WriteBorder();
-                    WriteLine(" Press ESC to cancel");
+                    WriteLine(" < Press ESC to cancel >");
 
                     Write(" Enter username: ");
                     string username = "";
@@ -608,7 +671,7 @@ class Client
                     ShowMenu.UserMenu(user.Nickname);
                     WriteLine("1");
                     IOHelper.WriteBorder();
-                    WriteLine(" Press ESC to cancel");
+                    WriteLine(" < Press ESC to cancel >");
 
                     Write(" Enter new nickname: ");
                     string newNickname = "";
@@ -647,7 +710,7 @@ class Client
                     ShowMenu.UserMenu(user.Nickname);
                     WriteLine("2");
                     IOHelper.WriteBorder();
-                    WriteLine(" Press ESC to cancel");
+                    WriteLine(" < Press ESC to cancel >");
 
                     Write(" Enter old password   : ");
                     if (oldPwd.Length > 0)
@@ -714,6 +777,44 @@ class Client
                         return;
                     }
                     else continue;
+                }
+            }
+
+            public static void CreateChatGroup(NetworkStream stream, User creator, List<ChatGroup> groups, int curPage)
+            {
+                byte[] buffer = new byte[MagicNumbers.bufferSize];
+
+                while(true)
+                {
+                    ShowMenu.ManageGroupMenu(groups, curPage);
+                    WriteLine("1");
+                    IOHelper.WriteBorder();
+                    WriteLine(" < Press ESC to cancel >");
+
+                    Write(" Enter chat group name: ");
+                    string groupName = "";
+                    switch(Misc.InputData(ref groupName, "Nickname", MagicNumbers.nicknameMin, MagicNumbers.nicknameMax, false))
+                    {
+                        case null: return;
+                        case true: break;
+                        case false: continue;
+                    }
+
+                    ChatGroup newGroup = new()
+                    {
+                        CreatorID = creator.UID,
+                        GroupName = groupName
+                    };
+
+                    if (CommandHandler.Stream(stream, ref buffer, new(CommandType.CreateGroup, ChatGroup.Serialize(newGroup)), out _))
+                    {
+                        creator.Nickname = groupName;
+                        IOHelper.WriteBorder();
+                        WriteLine(" Created chat group successfully!");
+                        ReadKey(true);
+                    }
+                    
+                    return;
                 }
             }
         }
@@ -798,7 +899,7 @@ class Client
                 IOHelper.WriteHeader("Zelo");
                 WriteLine($" List of chat groups (Page {page + 1}/{groups.Count / 10 + 1}):");
 
-                foreach(ChatGroup group in groups.GetRange(page * 10, 10))
+                foreach(ChatGroup group in groups.GetRange(page * 10, Math.Min(groups.Count - page * 10, 10)))
                 {
                     WriteLine($" • {group.ToString(true)}");
                 }
@@ -818,7 +919,7 @@ class Client
                 IOHelper.WriteHeader("Zelo");
                 WriteLine($" List of created chat groups (Page {page + 1}/{groups.Count / 10 + 1}):");
 
-                foreach(ChatGroup group in groups.GetRange(page * 10, 10))
+                foreach(ChatGroup group in groups.GetRange(page * 10, Math.Min(groups.Count - page * 10, 10)))
                 {
                     WriteLine($" • {group.ToString(true)}");
                 }
@@ -914,26 +1015,26 @@ class Client
                 Command? tempCmd;
                 receivedCmd = new();
 
-                int bytesRead, totalBytesRead = 0;
+                int bytesRead, totalRead = 0;
                 lock(stream)
                 {
                     stream.Write(EncodeString(Command.Serialize(cmdToSend)));
 
                     while(true)
                     {
-                        if (totalBytesRead + 1024 > buffer.Length)
-                            Array.Resize(ref buffer, buffer.Length * 2);
-                            
-                        bytesRead = stream.Read(buffer, 0, buffer.Length);
+                        bytesRead = stream.Read(buffer, totalRead, 1024);
 
-                        if (bytesRead == 0)
+                        totalRead += bytesRead;
+                        
+                        if(bytesRead < 1024)
                             break;
 
-                        totalBytesRead += bytesRead;
+                        if(totalRead + 1024 >= buffer.Length)
+                            Array.Resize(ref buffer, buffer.Length * 2);
                     }
                 }
                 
-                tempCmd = Command.Deserialize(DecodeBytes(buffer, 0, bytesRead));
+                tempCmd = Command.Deserialize(DecodeBytes(buffer, 0, totalRead));
                 switch(tempCmd?.CommandType)
                 {
                     case var value when value == cmdToSend.CommandType:
