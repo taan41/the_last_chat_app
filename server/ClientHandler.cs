@@ -43,6 +43,10 @@ class ClientHandler
 
                 switch (receivedCmd?.CommandType)
                 {
+                    case CommandType.Ping:
+                        cmdToSend.Set(CommandType.Ping, null);
+                        break;
+
                     case CommandType.CheckUsername:
                         CheckUsername(receivedCmd, ref cmdToSend);
                         break;
@@ -56,12 +60,18 @@ class ClientHandler
                         break;
 
                     case CommandType.Login:
-                        user = Login(receivedCmd, ref cmdToSend);
+                        Login(receivedCmd, ref cmdToSend, out user);
                         break;
 
                     case CommandType.Logout:
                         user = null;
+                        cmdToSend.Set(CommandType.Logout, null);
                         break;
+
+                    case CommandType.SetNickname:
+                        SetNickname(receivedCmd, ref cmdToSend, ref user);
+                        break;
+
 
                     case CommandType.Disconnect:
                         stream.Close();
@@ -106,6 +116,7 @@ class ClientHandler
     private bool Register(Command receivedCmd, ref Command cmdToSend)
     {
         User? registeredUser = User.Deserialize(receivedCmd.Payload);
+
         if(registeredUser == null)
         {
             cmdToSend.SetError("Invalid user data");
@@ -150,14 +161,13 @@ class ClientHandler
         return false;
     }
 
-    private User? Login(Command receivedCmd, ref Command cmdToSend)
+    private bool Login(Command receivedCmd, ref Command cmdToSend, out User? loggedInUser)
     {
-        User? requestedUser;
-        if((requestedUser = DbHelper.Login(receivedCmd.Payload, out string errorMessage)) != null)
+        if((loggedInUser = DbHelper.Login(receivedCmd.Payload, out string errorMessage)) != null)
         {
-            cmdToSend.Set(receivedCmd.CommandType, User.Serialize(requestedUser));
-            LogManager.AddLog($"{endPoint} logged in as '{requestedUser}'");
-            return requestedUser;
+            cmdToSend.Set(receivedCmd.CommandType, User.Serialize(loggedInUser));
+            LogManager.AddLog($"{endPoint} logged in as '{loggedInUser}'");
+            return true;
         }
         else if(errorMessage.Length > 0)
         {
@@ -170,7 +180,40 @@ class ClientHandler
             LogManager.AddLog($"{endPoint} failed to login as '{receivedCmd.Payload}'");
         }
 
-        return null;
+        return false;
+    }
+
+    private bool SetNickname(Command receivedCmd, ref Command cmdToSend, ref User? user)
+    {
+        if(user == null)
+        {
+            cmdToSend.SetError("Server-side error while changing nickname");
+            LogManager.AddLog($"Error from {endPoint} changing nickname: Null user");
+        }
+        else
+        {
+            string oldNickname = user.Nickname;
+
+            if(DbHelper.SetNickname(user, receivedCmd.Payload, out string errorMessage))
+            {
+                user.Nickname = receivedCmd.Payload;
+                cmdToSend.Set(receivedCmd.CommandType, null);
+                LogManager.AddLog($"{endPoint} changed nickname of '{user.Username}' from '{oldNickname}' to '{user.Nickname}");
+                return true;
+            }
+            else if(errorMessage.Length > 0)
+            {
+                cmdToSend.SetError("Database error while changing nickname");
+                LogManager.AddLog($"DB error from {endPoint} changing nickname: {errorMessage}");
+            }
+            else
+            {
+                cmdToSend.SetError("Logged in unsuccessfully");
+                LogManager.AddLog($"{endPoint} failed to change nickname of '{user.Username}");
+            }
+        }
+
+        return false;
     }
 
 }

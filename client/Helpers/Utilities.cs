@@ -10,7 +10,8 @@ class MagicNumbers
         groupnameMin = 6, groupNameMax = 50,
         pwdHashLen = 32, pwdSaltLen = 16,
         inputLimit = 500,
-        bufferSize = 2048;
+        bufferSize = 2048,
+        streamTimeOut = 15000;
 }
 
 class Utilities
@@ -21,33 +22,6 @@ class Utilities
     public static string DecodeBytes(byte[] data, int index, int length) => Encoding.Unicode.GetString(data, index, length);
 
     public static byte[] EncodeString(string content) => Encoding.Unicode.GetBytes(content);
-
-    // Generic command handler
-    public static bool CommandHandler(Command? cmd, CommandType expectedCmdType)
-    {
-        if(cmd == null)
-        {
-            Console.WriteLine(" Error: Received invalid command");
-            Console.ReadKey(true);
-            return false;
-        }
-
-        switch(cmd.CommandType)
-        {
-            case var value when value == expectedCmdType:
-                return true;
-
-            case CommandType.Error:
-                Console.WriteLine($" Error: {cmd.Payload}");
-                Console.ReadKey(true);
-                return false;
-
-            default:
-                Console.WriteLine(" Error: Received unknown command");
-                Console.ReadKey(true);
-                return false;
-        }
-    }
 
     // Hash & verify password
     public static PasswordSet HashPassword(string pwd)

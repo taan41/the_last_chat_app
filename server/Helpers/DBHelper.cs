@@ -213,10 +213,16 @@ static class DbHelper
         }
     }
 
-    public static bool SetNickname(int userID, string newNickname, out string errorMessage)
+    public static bool SetNickname(User user, string newNickname, out string errorMessage)
     {
         string query = "UPDATE Users SET Nickname = @newNickname WHERE UserID = @userID";
         errorMessage = "";
+
+        if(user.UID == null)
+        {
+            errorMessage = "Null UID";
+            return false;
+        }
 
         try
         {    
@@ -225,7 +231,7 @@ static class DbHelper
 
             MySqlCommand cmd = new(query, conn);
             cmd.Parameters.AddWithValue("@newNickname", newNickname);
-            cmd.Parameters.AddWithValue("@userID", userID);
+            cmd.Parameters.AddWithValue("@userID", user.UID);
 
             cmd.ExecuteNonQuery();
             return true;

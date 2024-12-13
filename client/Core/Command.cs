@@ -2,7 +2,7 @@ using System.Text.Json;
 
 enum CommandType
 {
-    Empty, Error, RequestAES,
+    Empty, Ping, Error, RequestAES,
     CheckUsername, Register,
     RequestUserPwd, Login, Logout,
     SetNickname,
