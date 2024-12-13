@@ -50,7 +50,7 @@ static class DbHelper
                 Nickname NVARCHAR({MagicNumbers.nicknameMax}) NOT NULL,
                 PasswordHash VARBINARY({MagicNumbers.pwdHashLen}) DEFAULT NULL,
                 Salt VARBINARY({MagicNumbers.pwdSaltLen}) DEFAULT NULL,
-                CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                CreateTime TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )", conn))
         {
             createUsers.ExecuteNonQuery();
@@ -60,8 +60,9 @@ static class DbHelper
             CREATE TABLE ChatGroups (
                 GroupID INT AUTO_INCREMENT PRIMARY KEY,
                 GroupName NVARCHAR({MagicNumbers.groupNameMax}) NOT NULL,
-                CreatedBy INT NOT NULL,
-                CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                CreatorID INT DEFAULT NULL,
+                CreateTime TIMESTAMP DEFAULT CURRENT_TIMESTAMP, 
+                FOREIGN KEY (CreatorID) REFERENCES Users(UserID) ON DELETE SET NULL
             )", conn))
         {
             createChatGroups.ExecuteNonQuery();
@@ -124,7 +125,7 @@ static class DbHelper
         }
     }
 
-    public static bool Register(User user, out string errorMessage)
+    public static bool AddUser(User user, out string errorMessage)
     {
         string query = "INSERT INTO Users (Username, Nickname, PasswordHash, Salt) VALUES (@username, @nickname, @pwdHash, @salt)";
         errorMessage = "";
@@ -157,49 +158,11 @@ static class DbHelper
         }
     }
 
-    public static bool GetUserPwd(string username, out PasswordSet? userPwd, out string errorMessage)
+    public static bool GetUser(string username, bool getPwd, out User? requestedUser, out string errorMessage)
     {
-        string query = "SELECT PasswordHash, Salt FROM Users WHERE Username = @username";
+        string query = "SELECT UserID, Username, Nickname, PasswordHash, Salt FROM Users WHERE Username=@username";
         errorMessage = "";
-        userPwd = null;
-
-        try
-        {
-            using MySqlConnection conn = new(connectionString);
-            conn.Open();
-
-            using MySqlCommand cmd = new(query, conn);
-            cmd.Parameters.AddWithValue("@username", username);
-
-            using MySqlDataReader reader = cmd.ExecuteReader();
-
-            if(!reader.Read()) // Username not found
-            {
-                errorMessage = $"No user with username '{username}' found";
-                return false;
-            }
-
-            byte[] pwdHash = new byte[MagicNumbers.pwdHashLen];
-            byte[] salt = new byte[MagicNumbers.pwdSaltLen];
-
-            reader.GetBytes("PasswordHash", 0, pwdHash, 0, MagicNumbers.pwdHashLen);
-            reader.GetBytes("Salt", 0, salt, 0, MagicNumbers.pwdSaltLen);
-
-            userPwd = new(pwdHash, salt);
-            return true;
-        }
-        catch (MySqlException ex)
-        {
-            errorMessage = ex.Message;
-            return false;
-        }
-    }
-
-    public static bool Login(string username, out User? loggedInUser, out string errorMessage)
-    {
-        string query = "SELECT UserID, Username, Nickname FROM Users WHERE Username=@username";
-        errorMessage = "";
-        loggedInUser = null;
+        requestedUser = null;
 
         try
         {
@@ -217,7 +180,54 @@ static class DbHelper
                 return false;
             }
 
-            loggedInUser = new(reader.GetInt32("UserID"), reader.GetString("Username"), reader.GetString("Nickname"), null);
+            if(getPwd)
+            {
+                byte[] pwdHash = new byte[MagicNumbers.pwdHashLen];
+                byte[] salt = new byte[MagicNumbers.pwdSaltLen];
+
+                reader.GetBytes("PasswordHash", 0, pwdHash, 0, MagicNumbers.pwdHashLen);
+                reader.GetBytes("Salt", 0, salt, 0, MagicNumbers.pwdSaltLen);
+
+                requestedUser = new(reader.GetInt32("UserID"), reader.GetString("Username"), reader.GetString("Nickname"), new(pwdHash, salt));
+                return true;
+            }
+            else
+            {
+                requestedUser = new(reader.GetInt32("UserID"), reader.GetString("Username"), reader.GetString("Nickname"), null);
+                return true;
+            }
+        }
+        catch (MySqlException ex)
+        {
+            errorMessage = ex.Message;
+            return false;
+        }
+    }
+
+    public static bool UpdateUser(User updatedUser, out string errorMessage)
+    {
+        if(updatedUser.UID == null || updatedUser.PwdSet == null)
+        {
+            errorMessage = "Null UID/Password Set";
+            return false;
+        }
+
+        string query = "UPDATE Users SET Nickname = @newNickname, PasswordHash = @newPwdHash, Salt = @newSalt WHERE UserID = @userID";
+        errorMessage = "";
+
+        try
+        {
+            using MySqlConnection conn = new(connectionString);
+            conn.Open();
+
+            using MySqlCommand cmd = new(query, conn);
+            cmd.Parameters.AddWithValue("@newNickname", updatedUser.Nickname);
+            cmd.Parameters.AddWithValue("@newPwdHash", updatedUser.PwdSet.PwdHash);
+            cmd.Parameters.AddWithValue("@newSalt", updatedUser.PwdSet.Salt);
+            cmd.Parameters.AddWithValue("@userID", updatedUser.UID);
+
+            cmd.ExecuteNonQuery();
+
             return true;
         }
         catch (MySqlException ex)
@@ -227,39 +237,9 @@ static class DbHelper
         }
     }
 
-    public static bool ChangeNickname(User user, string newNickname, out string errorMessage)
+    public static bool AddChatGroup(ChatGroup chatGroup, out string errorMessage)
     {
-        string query = "UPDATE Users SET Nickname = @newNickname WHERE UserID = @userID";
-        errorMessage = "";
-
-        if(user.UID == null)
-        {
-            errorMessage = "Null UID";
-            return false;
-        }
-
-        try
-        {    
-            using MySqlConnection conn = new(connectionString);
-            conn.Open();
-
-            using MySqlCommand cmd = new(query, conn);
-            cmd.Parameters.AddWithValue("@newNickname", newNickname);
-            cmd.Parameters.AddWithValue("@userID", user.UID);
-
-            cmd.ExecuteNonQuery();
-            return true;
-        }
-        catch (MySqlException ex)
-        {
-            errorMessage = ex.Message;
-            return false;
-        }
-    }
-
-    public static bool ChangePassword(User user, PasswordSet pwdSet, out string errorMessage)
-    {
-        string query = "UPDATE Users SET PasswordHash = @newPwdHash, Salt = @newSalt WHERE UserID = @userID";
+        string query = "INSERT INTO ChatGroups (GroupName, CreatorID) VALUES (@groupName, @creatorID)";
         errorMessage = "";
 
         try
@@ -268,11 +248,11 @@ static class DbHelper
             conn.Open();
 
             using MySqlCommand cmd = new(query, conn);
-            cmd.Parameters.AddWithValue("@newPwdHash", pwdSet.PwdHash);
-            cmd.Parameters.AddWithValue("@newSalt", pwdSet.Salt);
-            cmd.Parameters.AddWithValue("@userID", user.UID);
+            cmd.Parameters.AddWithValue("@groupName", chatGroup.GroupName);
+            cmd.Parameters.AddWithValue("@creatorID", chatGroup.CreatorID);
 
             cmd.ExecuteNonQuery();
+
             return true;
         }
         catch (MySqlException ex)

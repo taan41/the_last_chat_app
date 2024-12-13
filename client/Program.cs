@@ -579,7 +579,7 @@ class Client
                     WriteLine("2");
                     IOHelper.WriteBorder();
 
-                    Write(" Enter old password: ");
+                    Write(" Enter old password   : ");
                     if(oldPwd != null)
                         WriteLine(new string('*', oldPwd.Length));
                     else
@@ -600,7 +600,7 @@ class Client
                         continue;
                     }
 
-                    Write(" Enter new password: ");
+                    Write(" Enter new password   : ");
                     if(newPwd != null)
                         WriteLine(new string('*', newPwd.Length));
                     else
@@ -613,7 +613,15 @@ class Client
                                 continue;
                         }
 
-                    Write(" Enter new password: ");
+                    if(newPwd!.Equals(oldPwd))
+                    {
+                        newPwd = null;
+                        WriteLine(" Error: New password must be different");
+                        ReadKey(true);
+                        continue;
+                    }
+
+                    Write(" Confirm new password : ");
                     string? confirmPwd = null;
                     switch(Misc.InputData(ref confirmPwd, "Password", MagicNumbers.nicknameMin, MagicNumbers.nicknameMax, true))
                     {
