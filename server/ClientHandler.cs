@@ -24,16 +24,16 @@ class ClientHandler
 
     public async Task HandlingClientAsync(CancellationToken token)
     {
-        byte[] buffer = new byte[MagicNumbers.bufferSize];
-        Memory<byte> memory = new(buffer);
-        int bytesRead;
-
-        Command? receivedCmd, cmdToSend = new();
-
-        User? user = null, partner = null;
 
         try
         {
+            byte[] buffer = new byte[MagicNumbers.bufferSize];
+            Memory<byte> memory = new(buffer, 0, buffer.Length);
+            int bytesRead;
+
+            Command? receivedCmd, cmdToSend = new();
+            User? user = null, partner = null;
+
             while(!token.IsCancellationRequested)
             {
                 bytesRead = await stream.ReadAsync(memory, token);
@@ -65,14 +65,18 @@ class ClientHandler
                         break;
 
                     case CommandType.Logout:
-                        user = null;
                         cmdToSend.Set(CommandType.Logout, null);
+                        LogManager.AddLog($"{endPoint} logged out from {user}");
+                        user = null;
                         break;
 
-                    case CommandType.SetNickname:
-                        SetNickname(receivedCmd, ref cmdToSend, ref user);
+                    case CommandType.ChangeNickname:
+                        ChangeNickname(receivedCmd, ref cmdToSend, ref user);
                         break;
 
+                    case CommandType.ChangePassword:
+                        ChangePassword(receivedCmd, ref cmdToSend, ref user);
+                        break;
 
                     case CommandType.Disconnect:
                         stream.Close();
@@ -93,6 +97,9 @@ class ClientHandler
         catch(Exception ex)
         {
             LogManager.AddLog($"Error while handling client: {ex.Message}");
+            stream.Close();
+            client.Close();
+            return;
         }
     }
 
@@ -134,12 +141,18 @@ class ClientHandler
 
     private bool RequestUserPwd(Command receivedCmd, ref Command cmdToSend)
     {
-        PasswordSet? pwdSet = DbHelper.GetUserPwd(receivedCmd.Payload, out string errorMessage);
-
-        if(pwdSet != null)
+        if(DbHelper.GetUserPwd(receivedCmd.Payload, out PasswordSet? pwdSet, out string errorMessage))
         {
-            cmdToSend.Set(receivedCmd.CommandType, PasswordSet.Serialize(pwdSet));
-            return true;
+            if(pwdSet != null)
+            {
+                cmdToSend.Set(receivedCmd.CommandType, PasswordSet.Serialize(pwdSet));
+                return true;
+            }
+            else
+            {
+                cmdToSend.SetError("Server-side error");
+                LogManager.AddLog($"Error from {endPoint} trying to request password: Returned PasswordSet is null");
+            }
         }
         else 
             Helper.ErrorHandler(errorMessage, endPoint, "request password", ref cmdToSend);
@@ -149,11 +162,19 @@ class ClientHandler
 
     private bool Login(Command receivedCmd, ref Command cmdToSend, out User? loggedInUser)
     {
-        if((loggedInUser = DbHelper.Login(receivedCmd.Payload, out string errorMessage)) != null)
+        if(DbHelper.Login(receivedCmd.Payload, out loggedInUser, out string errorMessage))
         {
-            cmdToSend.Set(receivedCmd.CommandType, User.Serialize(loggedInUser));
-            LogManager.AddLog($"{endPoint} logged in as '{loggedInUser}'");
-            return true;
+            if(loggedInUser != null)
+            {
+                cmdToSend.Set(receivedCmd.CommandType, User.Serialize(loggedInUser));
+                LogManager.AddLog($"{endPoint} logged in as '{loggedInUser}'");
+                return true;
+            }
+            else
+            {
+                cmdToSend.SetError("Server-side error");
+                LogManager.AddLog($"Error from {endPoint} trying to log in: Returned User is null");
+            }
         }
         else
             Helper.ErrorHandler(errorMessage, endPoint, "log in", ref cmdToSend);
@@ -161,22 +182,22 @@ class ClientHandler
         return false;
     }
 
-    private bool SetNickname(Command receivedCmd, ref Command cmdToSend, ref User? user)
+    private bool ChangeNickname(Command receivedCmd, ref Command cmdToSend, ref User? user)
     {
         if(user == null)
         {
-            cmdToSend.SetError("Server-side error trying to change nickname");
-            LogManager.AddLog($"Error from {endPoint} trying to change nickname: Null user");
+            cmdToSend.SetError("Server-side error");
+            LogManager.AddLog($"Error from {endPoint} trying to change nickname: Null User");
         }
         else
         {
             string oldNickname = user.Nickname;
 
-            if(DbHelper.SetNickname(user, receivedCmd.Payload, out string errorMessage))
+            if(DbHelper.ChangeNickname(user, receivedCmd.Payload, out string errorMessage))
             {
                 user.Nickname = receivedCmd.Payload;
                 cmdToSend.Set(receivedCmd.CommandType, null);
-                LogManager.AddLog($"{endPoint} changed nickname of '{user.Username}' from '{oldNickname}' to '{user.Nickname}");
+                LogManager.AddLog($"{endPoint} updated '{user}': New nickname ('{oldNickname}' -> '{user.Nickname}')");
                 return true;
             }
             else
@@ -186,13 +207,37 @@ class ClientHandler
         return false;
     }
 
+    private bool ChangePassword(Command receivedCmd, ref Command cmdToSend, ref User? user)
+    {
+        PasswordSet? receivedPwdSet = PasswordSet.Deserialize(receivedCmd.Payload);
+        if(user == null || receivedCmd.Payload == null || receivedPwdSet == null)
+        {
+            cmdToSend.SetError("Server-side error");
+            LogManager.AddLog($"Error from {endPoint} trying to change password: Null User/Payload/PasswordSet");
+        }
+        else
+        {
+            if(DbHelper.ChangePassword(user, receivedPwdSet, out string errorMessage))
+            {
+                cmdToSend.Set(receivedCmd.CommandType, null);
+                LogManager.AddLog($"{endPoint} updated '{user}': New password");
+                return true;
+            }
+            else
+                Helper.ErrorHandler(errorMessage, endPoint, "change password", ref cmdToSend);
+        }
+
+        return false;
+    }
+
+
     private class Helper
     {
         public static void ErrorHandler(string errorMessage, EndPoint endPoint, string action, ref Command cmdToSend)
         {
             if(errorMessage.Length > 0)
             {
-                cmdToSend.SetError($"Database error trying to {action}");
+                cmdToSend.SetError(errorMessage);
                 LogManager.AddLog($"DB error from {endPoint} trying to {action}: {errorMessage}");
             }
             else

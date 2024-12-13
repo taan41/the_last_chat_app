@@ -108,12 +108,16 @@ static class DbHelper
             cmd.Parameters.AddWithValue("@username", username);
 
             using MySqlDataReader reader = cmd.ExecuteReader();
-            if(!reader.Read())
+
+            if(!reader.Read()) // No same username found
                 return true;
             else
+            {
+                errorMessage = "Unavailable username";
                 return false;
+            }
         }
-        catch(MySqlException ex)
+        catch (MySqlException ex)
         {
             errorMessage = ex.Message;
             return false;
@@ -127,7 +131,7 @@ static class DbHelper
 
         if(user.PwdSet == null)
         {
-            errorMessage = "Invalid user password";
+            errorMessage = "Null user password";
             return false;
         }
 
@@ -153,10 +157,11 @@ static class DbHelper
         }
     }
 
-    public static PasswordSet? GetUserPwd(string username, out string errorMessage)
+    public static bool GetUserPwd(string username, out PasswordSet? userPwd, out string errorMessage)
     {
         string query = "SELECT PasswordHash, Salt FROM Users WHERE Username = @username";
         errorMessage = "";
+        userPwd = null;
 
         try
         {
@@ -169,7 +174,10 @@ static class DbHelper
             using MySqlDataReader reader = cmd.ExecuteReader();
 
             if(!reader.Read()) // Username not found
-                return null;
+            {
+                errorMessage = $"No user with username '{username}' found";
+                return false;
+            }
 
             byte[] pwdHash = new byte[MagicNumbers.pwdHashLen];
             byte[] salt = new byte[MagicNumbers.pwdSaltLen];
@@ -177,19 +185,21 @@ static class DbHelper
             reader.GetBytes("PasswordHash", 0, pwdHash, 0, MagicNumbers.pwdHashLen);
             reader.GetBytes("Salt", 0, salt, 0, MagicNumbers.pwdSaltLen);
 
-            return new(pwdHash, salt);
+            userPwd = new(pwdHash, salt);
+            return true;
         }
         catch (MySqlException ex)
         {
             errorMessage = ex.Message;
-            return null;
+            return false;
         }
     }
 
-    public static User? Login(string username, out string errorMessage)
+    public static bool Login(string username, out User? loggedInUser, out string errorMessage)
     {
         string query = "SELECT UserID, Username, Nickname FROM Users WHERE Username=@username";
         errorMessage = "";
+        loggedInUser = null;
 
         try
         {
@@ -202,18 +212,22 @@ static class DbHelper
             using MySqlDataReader reader = cmd.ExecuteReader();
 
             if(!reader.Read()) // User not found
-                return null;
+            {
+                errorMessage = $"No user with username '{username}' found";
+                return false;
+            }
 
-            return new(reader.GetInt32("UserID"), reader.GetString("Username"), reader.GetString("Nickname"), null);
+            loggedInUser = new(reader.GetInt32("UserID"), reader.GetString("Username"), reader.GetString("Nickname"), null);
+            return true;
         }
         catch (MySqlException ex)
         {
             errorMessage = ex.Message;
-            return null;
+            return false;
         }
     }
 
-    public static bool SetNickname(User user, string newNickname, out string errorMessage)
+    public static bool ChangeNickname(User user, string newNickname, out string errorMessage)
     {
         string query = "UPDATE Users SET Nickname = @newNickname WHERE UserID = @userID";
         errorMessage = "";
@@ -229,8 +243,33 @@ static class DbHelper
             using MySqlConnection conn = new(connectionString);
             conn.Open();
 
-            MySqlCommand cmd = new(query, conn);
+            using MySqlCommand cmd = new(query, conn);
             cmd.Parameters.AddWithValue("@newNickname", newNickname);
+            cmd.Parameters.AddWithValue("@userID", user.UID);
+
+            cmd.ExecuteNonQuery();
+            return true;
+        }
+        catch (MySqlException ex)
+        {
+            errorMessage = ex.Message;
+            return false;
+        }
+    }
+
+    public static bool ChangePassword(User user, PasswordSet pwdSet, out string errorMessage)
+    {
+        string query = "UPDATE Users SET PasswordHash = @newPwdHash, Salt = @newSalt WHERE UserID = @userID";
+        errorMessage = "";
+
+        try
+        {
+            using MySqlConnection conn = new(connectionString);
+            conn.Open();
+
+            using MySqlCommand cmd = new(query, conn);
+            cmd.Parameters.AddWithValue("@newPwdHash", pwdSet.PwdHash);
+            cmd.Parameters.AddWithValue("@newSalt", pwdSet.Salt);
             cmd.Parameters.AddWithValue("@userID", user.UID);
 
             cmd.ExecuteNonQuery();
@@ -253,7 +292,7 @@ static class DbHelper
             using MySqlConnection conn = new(connectionString);
             conn.Open();
 
-            MySqlCommand cmd = new(query, conn);
+            using MySqlCommand cmd = new(query, conn);
             cmd.Parameters.AddWithValue("@senderID", message.SenderID);
             cmd.Parameters.AddWithValue("@receiverID", message.ReceiverID);
             cmd.Parameters.AddWithValue("@message", message.Content);
@@ -278,7 +317,7 @@ static class DbHelper
             using MySqlConnection conn = new(connectionString);
             conn.Open();
 
-            MySqlCommand cmd = new(query, conn);
+            using MySqlCommand cmd = new(query, conn);
             cmd.Parameters.AddWithValue("@senderID", message.SenderID);
             cmd.Parameters.AddWithValue("@groupID", message.GroupID);
             cmd.Parameters.AddWithValue("@message", message.Content);
@@ -389,7 +428,7 @@ static class DbHelper
             using MySqlConnection conn = new(connectionString);
             conn.Open();
 
-            MySqlCommand cmd = new(query, conn);
+            using MySqlCommand cmd = new(query, conn);
             cmd.Parameters.AddWithValue("@content", logContent);
 
             cmd.ExecuteNonQuery();

@@ -151,11 +151,11 @@ class Client
             switch (ReadLine())
             {
                 case "1":
-                    Helper.ClientAction.SetNickname(stream, ref nickname);
+                    Helper.ClientAction.ChangeNickname(stream, ref loggedInUser);
                     continue;
 
                 case "2":
-                    // CreateChatRoom(stream);
+                    Helper.ClientAction.ChangePassword(stream, ref loggedInUser);
                     continue;
 
                 case "3":
@@ -422,7 +422,7 @@ class Client
                     
                     if(!confirmPwd!.Equals(pwd))
                     {
-                        WriteLine(" Error: Password confirmation failed");
+                        WriteLine(" Error: Mis-match confirm password");
                         pwd = null;
                         confirmPwd = null;
                         ReadKey(true);
@@ -495,9 +495,7 @@ class Client
                     {
                         case null: return;
                         case true: break;
-                        case false:
-                            pwd = null;
-                            continue;
+                        case false: continue;
                     }
 
                     if(VerifyPassword(pwd!, pwdSet))
@@ -516,6 +514,7 @@ class Client
                             }
                             else
                             {
+                                loggedInUser.PwdSet = pwdSet;
                                 IOHelper.WriteBorder();
                                 WriteLine(" Logged in successfully!");
                                 ReadKey(true);
@@ -532,13 +531,13 @@ class Client
                 }
             }
 
-            public static bool? SetNickname(NetworkStream stream, ref string nickname)
+            public static void ChangeNickname(NetworkStream stream, ref User user)
             {
                 byte[] buffer = new byte[MagicNumbers.bufferSize];
 
                 while(true)
                 {
-                    ShowMenu.UserMenu(nickname);
+                    ShowMenu.UserMenu(user.Nickname);
                     WriteLine("1");
                     IOHelper.WriteBorder();
 
@@ -546,17 +545,100 @@ class Client
                     string? newNickname = null;
                     switch(Misc.InputData(ref newNickname, "Nickname", MagicNumbers.nicknameMin, MagicNumbers.nicknameMax, false))
                     {
-                        case null: return null;
+                        case null: return;
                         case true: break;
                         case false: continue;
                     }
 
-                    if(CommandHandler.Stream(stream, buffer, new(CommandType.SetNickname, newNickname), out _))
+                    if(CommandHandler.Stream(stream, buffer, new(CommandType.ChangeNickname, newNickname), out _))
                     {
-                        nickname = newNickname!;
-                        WriteLine(" Set nickname successfully");
+                        user.Nickname = newNickname!;
+                        IOHelper.WriteBorder();
+                        WriteLine(" Changed nickname successfully");
                         ReadKey(true);
-                        return true;
+                        return;
+                    }
+                    else continue;
+                }
+            }
+
+            public static void ChangePassword(NetworkStream stream, ref User user)
+            {
+                if(user.PwdSet == null)
+                {
+                    WriteLine(" Error: Null PasswordSet");
+                    return;
+                }
+
+                byte[] buffer = new byte[MagicNumbers.bufferSize];
+                string? oldPwd = null, newPwd = null;
+
+                while(true)
+                {
+                    ShowMenu.UserMenu(user.Nickname);
+                    WriteLine("2");
+                    IOHelper.WriteBorder();
+
+                    Write(" Enter old password: ");
+                    if(oldPwd != null)
+                        WriteLine(new string('*', oldPwd.Length));
+                    else
+                        switch(Misc.InputData(ref oldPwd, "Password", MagicNumbers.passwordMin, MagicNumbers.passwordMax, true))
+                        {
+                            case null: return;
+                            case true: break;
+                            case false:
+                                oldPwd = null;
+                                continue;
+                        }
+
+                    if(!VerifyPassword(oldPwd!, user.PwdSet))
+                    {
+                        oldPwd = null;
+                        WriteLine(" Error: Wrong password");
+                        ReadKey(true);
+                        continue;
+                    }
+
+                    Write(" Enter new password: ");
+                    if(newPwd != null)
+                        WriteLine(new string('*', newPwd.Length));
+                    else
+                        switch(Misc.InputData(ref newPwd, "Password", MagicNumbers.nicknameMin, MagicNumbers.nicknameMax, true))
+                        {
+                            case null: return;
+                            case true: break;
+                            case false:
+                                newPwd = null;
+                                continue;
+                        }
+
+                    Write(" Enter new password: ");
+                    string? confirmPwd = null;
+                    switch(Misc.InputData(ref confirmPwd, "Password", MagicNumbers.nicknameMin, MagicNumbers.nicknameMax, true))
+                    {
+                        case null: return;
+                        case true: break;
+                        case false: continue;
+                    }
+                        
+                    if(!confirmPwd!.Equals(newPwd))
+                    {
+                        newPwd = null;
+                        WriteLine(" Error: Mis-match confirm password");
+                        ReadKey(true);
+                        continue;
+                    }
+
+                    PasswordSet newPwdSet = HashPassword(newPwd);
+
+                    if(CommandHandler.Stream(stream, buffer, new(CommandType.ChangePassword, PasswordSet.Serialize(newPwdSet)), out _))
+                    {
+                        user.PwdSet = newPwdSet;
+                        IOHelper.WriteBorder();
+                        WriteLine(" Changed password successfully!");
+                        ReadKey(true);
+                        return;
                     }
                     else continue;
                 }
@@ -598,8 +680,9 @@ class Client
                 WriteLine($" Zello, {nickname}!");
                 IOHelper.WriteBorder();
                 WriteLine(" 1. Change nickname");
-                WriteLine(" 2. Private message");
-                WriteLine(" 3. Group message");
+                WriteLine(" 2. Change password");
+                WriteLine(" 3. Private message");
+                WriteLine(" 4. Group message");
                 WriteLine(" 0. Logout");
                 IOHelper.WriteBorder();
                 Write(" Enter Choice: ");

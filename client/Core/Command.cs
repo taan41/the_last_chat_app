@@ -5,7 +5,7 @@ enum CommandType
     Empty, Ping, Error, RequestAES,
     CheckUsername, Register,
     RequestUserPwd, Login, Logout,
-    SetNickname,
+    ChangeNickname, ChangePassword,
     RequestUserList, UserAsPartner, DeletePartner,
     RequestGroupList, CreateGroup, DeleteGroup, JoinGroup, LeaveGroup,
     Message,
