@@ -102,13 +102,8 @@ class ClientHandler
             cmdToSend.Set(receivedCmd.CommandType, null);
             return true;
         }
-        else if(errorMessage.Length > 0)
-        {
-            cmdToSend.SetError("Database error while checking username");
-            LogManager.AddLog($"DB error from {endPoint} checking username: {errorMessage}");
-        }
         else
-            cmdToSend.SetError("Unavailable username");
+            Helper.ErrorHandler(errorMessage, endPoint, "check username's avaibility", ref cmdToSend);
 
         return false;
     }
@@ -130,13 +125,8 @@ class ClientHandler
             LogManager.AddLog($"{endPoint} registered with username '{registeredUser.Username}'");
             return true;
         }
-        else if(errorMessage.Length > 0)
-        {
-            cmdToSend.SetError("Database error while registering");
-            LogManager.AddLog($"DB error from {endPoint} registering: {errorMessage}");
-        }
-        else
-            cmdToSend.SetError("Registered unsuccessfully");
+        else 
+            Helper.ErrorHandler(errorMessage, endPoint, "register", ref cmdToSend);
 
         return false;
     }
@@ -150,13 +140,8 @@ class ClientHandler
             cmdToSend.Set(receivedCmd.CommandType, PasswordSet.Serialize(pwdSet));
             return true;
         }
-        else if(errorMessage.Length > 0)
-        {
-            cmdToSend.SetError("Database error while getting password");
-            LogManager.AddLog($"DB error from {endPoint} getting pwd for '{receivedCmd.Payload}': {errorMessage}");
-        }
-        else
-            cmdToSend.SetError("No user found");
+        else 
+            Helper.ErrorHandler(errorMessage, endPoint, "request password", ref cmdToSend);
 
         return false;
     }
@@ -169,16 +154,8 @@ class ClientHandler
             LogManager.AddLog($"{endPoint} logged in as '{loggedInUser}'");
             return true;
         }
-        else if(errorMessage.Length > 0)
-        {
-            cmdToSend.SetError("Database error while trying to login");
-            LogManager.AddLog($"DB error from {endPoint} trying to login as '{receivedCmd.Payload}': {errorMessage}");
-        }
         else
-        {
-            cmdToSend.SetError("Logged in unsuccessfully");
-            LogManager.AddLog($"{endPoint} failed to login as '{receivedCmd.Payload}'");
-        }
+            Helper.ErrorHandler(errorMessage, endPoint, "log in", ref cmdToSend);
 
         return false;
     }
@@ -201,19 +178,28 @@ class ClientHandler
                 LogManager.AddLog($"{endPoint} changed nickname of '{user.Username}' from '{oldNickname}' to '{user.Nickname}");
                 return true;
             }
-            else if(errorMessage.Length > 0)
-            {
-                cmdToSend.SetError("Database error while changing nickname");
-                LogManager.AddLog($"DB error from {endPoint} changing nickname: {errorMessage}");
-            }
             else
-            {
-                cmdToSend.SetError("Logged in unsuccessfully");
-                LogManager.AddLog($"{endPoint} failed to change nickname of '{user.Username}");
-            }
+                Helper.ErrorHandler(errorMessage, endPoint, "set nickname", ref cmdToSend);
         }
 
         return false;
+    }
+
+    private class Helper
+    {
+        public static void ErrorHandler(string errorMessage, EndPoint endPoint, string action, ref Command cmdToSend)
+        {
+            if(errorMessage.Length > 0)
+            {
+                cmdToSend.SetError($"Database error trying to {action}");
+                LogManager.AddLog($"DB error from {endPoint} trying to {action}: {errorMessage}");
+            }
+            else
+            {
+                cmdToSend.SetError($"Server-side error trying to {action}");
+                LogManager.AddLog($"{endPoint} failed to {action}");
+            }
+        }
     }
 
 }
