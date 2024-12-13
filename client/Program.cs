@@ -372,6 +372,7 @@ class Client
                     ShowMenu.WelcomeMenu();
                     WriteLine("1");
                     IOHelper.WriteBorder();
+                    WriteLine(" Press ESC to cancel");
 
                     Write(" Enter username   : ");
                     if(username != null)
@@ -464,6 +465,7 @@ class Client
                     ShowMenu.WelcomeMenu();
                     WriteLine("2");
                     IOHelper.WriteBorder();
+                    WriteLine(" Press ESC to cancel");
 
                     Write(" Enter username: ");
                     string? username = null;
@@ -540,6 +542,7 @@ class Client
                     ShowMenu.UserMenu(user.Nickname);
                     WriteLine("1");
                     IOHelper.WriteBorder();
+                    WriteLine(" Press ESC to cancel");
 
                     Write(" Enter new nickname: ");
                     string? newNickname = null;
@@ -578,6 +581,7 @@ class Client
                     ShowMenu.UserMenu(user.Nickname);
                     WriteLine("2");
                     IOHelper.WriteBorder();
+                    WriteLine(" Press ESC to cancel");
 
                     Write(" Enter old password   : ");
                     if(oldPwd != null)

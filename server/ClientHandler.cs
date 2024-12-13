@@ -49,15 +49,15 @@ class ClientHandler
                         break;
 
                     case CommandType.CheckUsername:
-                        CheckUsername(receivedCmd, ref cmdToSend);
+                        (_, cmdToSend) = await CheckUsername(receivedCmd);
                         break;
 
                     case CommandType.Register:
-                        Register(receivedCmd, ref cmdToSend);
+                        (_, cmdToSend) = await Register(receivedCmd);
                         break;
 
                     case CommandType.RequestUserPwd:
-                        RequestUserPwd(receivedCmd, ref cmdToSend, out tempUser);
+                        (_, cmdToSend, tempUser) = await RequestUserPwd(receivedCmd);
                         break;
 
                     case CommandType.Login:
@@ -71,11 +71,11 @@ class ClientHandler
                         break;
 
                     case CommandType.ChangeNickname:
-                        ChangeNickname(receivedCmd, ref cmdToSend, ref user);
+                        (_, cmdToSend, user) = await ChangeNickname(receivedCmd, user);
                         break;
 
                     case CommandType.ChangePassword:
-                        ChangePassword(receivedCmd, ref cmdToSend, ref user);
+                        (_, cmdToSend, user) = await ChangePassword(receivedCmd, user);
                         break;
 
                     case CommandType.Disconnect:
@@ -103,50 +103,60 @@ class ClientHandler
         }
     }
 
-    private bool CheckUsername(Command receivedCmd, ref Command cmdToSend)
+    private async Task<(bool success, Command cmdToSend)> CheckUsername(Command receivedCmd)
     {
-        if(DbHelper.CheckUsername(receivedCmd.Payload, out string errorMessage))
+        Command cmdToSend = new();
+
+        (bool success, string errorMessage) = await DbHelper.CheckUsername(receivedCmd.Payload);
+
+        if(success)
         {
             cmdToSend.Set(receivedCmd.CommandType, null);
-            return true;
         }
         else
             Helper.DBErrorHandler(errorMessage, endPoint, "check username's avaibility", ref cmdToSend);
 
-        return false;
+        return (success, cmdToSend);
     }
 
-    private bool Register(Command receivedCmd, ref Command cmdToSend)
+    private async Task<(bool success, Command cmdToSend)> Register(Command receivedCmd)
     {
+        Command cmdToSend = new();
+
         User? registeredUser = User.Deserialize(receivedCmd.Payload);
 
         if(registeredUser == null)
         {
             cmdToSend.SetError("Invalid user data");
             LogManager.AddLog($"Error from {endPoint} registering: Invalid user data");
-            return false;
+            return (false, cmdToSend);
         }
 
-        if(DbHelper.AddUser(registeredUser, out string errorMessage))
+        (bool success, string errorMessage) = await DbHelper.AddUser(registeredUser);
+
+        if(success)
         {
             cmdToSend.Set(receivedCmd.CommandType, null);
             LogManager.AddLog($"{endPoint} registered with username '{registeredUser.Username}'");
-            return true;
         }
         else 
             Helper.DBErrorHandler(errorMessage, endPoint, "register", ref cmdToSend);
 
-        return false;
+        return (success, cmdToSend);
     }
 
-    private bool RequestUserPwd(Command receivedCmd, ref Command cmdToSend, out User? requestedUser)
+    private async Task<(bool success, Command cmdToSend, User? requestedUser)> RequestUserPwd(Command receivedCmd)
     {
-        if(DbHelper.GetUser(receivedCmd.Payload, true, out requestedUser, out string errorMessage))
+        Command cmdToSend = new();
+
+        (bool success, string errorMessage, User? requestedUser) = await DbHelper.GetUser(receivedCmd.Payload, true);
+
+        if(success)
         {
             if(requestedUser != null && requestedUser.PwdSet != null)
             {
                 cmdToSend.Set(receivedCmd.CommandType, PasswordSet.Serialize(requestedUser.PwdSet));
-                return true;
+                return (success, cmdToSend, requestedUser);
             }
             else
             {
@@ -157,7 +167,7 @@ class ClientHandler
         else 
             Helper.DBErrorHandler(errorMessage, endPoint, "request password", ref cmdToSend);
 
-        return false;
+        return (success, cmdToSend, null);
     }
 
     private bool Login(Command receivedCmd, ref Command cmdToSend, ref User? user, User? tempUser)
@@ -177,56 +187,70 @@ class ClientHandler
         }
     }
 
-    private bool ChangeNickname(Command receivedCmd, ref Command cmdToSend, ref User? user)
+    private async Task<(bool success, Command cmdToSend, User? newUser)> ChangeNickname(Command receivedCmd, User? oldUser)
     {
-        if(user == null)
+        Command cmdToSend = new();
+
+        if(oldUser == null)
         {
             cmdToSend.SetError("Server-side error");
             LogManager.AddLog($"Error from {endPoint} trying to change nickname: Null User");
+            return (false, cmdToSend, null);
         }
         else
         {
-            User? tempUser = user;
-            tempUser.Nickname = receivedCmd.Payload;
+            User? updatedUser = new(oldUser)
+            {
+                Nickname = receivedCmd.Payload
+            };
 
-            if(DbHelper.UpdateUser(tempUser, out string errorMessage))
+            (bool success, string errorMessage) = await DbHelper.UpdateUser(updatedUser);
+
+            if(success)
             {
                 cmdToSend.Set(receivedCmd.CommandType, null);
-                LogManager.AddLog($"{endPoint} updated '{user}': New nickname ('{user.Nickname}' -> '{tempUser.Nickname}')");
-                user = tempUser;
-                return true;
+                LogManager.AddLog($"{endPoint} updated '{oldUser}': New nickname ('{oldUser.Nickname}' -> '{updatedUser.Nickname}')");
+                return (success, cmdToSend, updatedUser);
             }
             else
+            {
                 Helper.DBErrorHandler(errorMessage, endPoint, "change nickname", ref cmdToSend);
+                return (success, cmdToSend, oldUser);
+            }
         }
-
-        return false;
     }
 
-    private bool ChangePassword(Command receivedCmd, ref Command cmdToSend, ref User? user)
+    private async Task<(bool success, Command cmdToSend, User? newUser)> ChangePassword(Command receivedCmd, User? oldUser)
     {
-        if(user == null)
+        Command cmdToSend = new();
+
+        if(oldUser == null)
         {
             cmdToSend.SetError("Server-side error");
             LogManager.AddLog($"Error from {endPoint} trying to change password: Null User");
+            return (false, cmdToSend, null);
         }
         else
         {
-            User? tempUser = user;
-            tempUser.PwdSet = PasswordSet.Deserialize(receivedCmd.Payload);
+            User? updatedUser = new(oldUser)
+            {
+                PwdSet = PasswordSet.Deserialize(receivedCmd.Payload)
+            };
 
-            if(DbHelper.UpdateUser(tempUser, out string errorMessage))
+            (bool success, string errorMessage) = await DbHelper.UpdateUser(updatedUser);
+
+            if(success)
             {
                 cmdToSend.Set(receivedCmd.CommandType, null);
-                LogManager.AddLog($"{endPoint} updated '{user}': New password");
-                user = tempUser;
-                return true;
+                LogManager.AddLog($"{endPoint} updated '{oldUser}': New password");
+                return (success, cmdToSend, updatedUser);
             }
             else
+            {
                 Helper.DBErrorHandler(errorMessage, endPoint, "change nickname", ref cmdToSend);
+                return (success, cmdToSend, oldUser);
+            }
         }
-
-        return false;
     }
 
 

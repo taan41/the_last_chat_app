@@ -14,19 +14,19 @@ static class LogManager
     private static bool initailized = false;
     private static int signalFlag = 1;
 
-    public static void Initialize()
+    public static async void Initialize()
     {
-        List<Log>? oldLog = DbHelper.GetLogHistory(out string errorMessage);
+        (List<Log>? oldLog, string errorMessage) = await DbHelper.GetLogHistory();
 
         if(oldLog == null)
-            Console.WriteLine($" Error while retrieving log: {errorMessage}");
+            Console.WriteLine($" DB error trying to retrieve log: {errorMessage}");
         else if(oldLog.Count > 0)
             logList = oldLog;
 
         initailized = true;
     }
 
-    public static void AddLog(string logContent)
+    public static async void AddLog(string logContent)
     {
         if(!initailized)
             return;
@@ -34,14 +34,16 @@ static class LogManager
         lock(logList)
             logList.Add(new(null, logContent));
 
-        if(!DbHelper.AddLog(logContent, out string errorMessage))
-            Console.WriteLine($" Error while adding log: {errorMessage}");
+        (bool success, string errorMessage) = await DbHelper.AddLog(logContent);
+
+        if(!success)
+            Console.WriteLine($" DB error trying to add new log: {errorMessage}");
         
         if(Interlocked.Exchange(ref signalFlag, 1) == 0) // Check if there's an active listener
             logSemaphore.Release(); // Signal that a new log is available.
     }
 
-    public static void ClearLog()
+    public static async void ClearLog()
     {
         if(!initailized)
             return;
@@ -49,10 +51,12 @@ static class LogManager
         lock(logList)
             logList.Clear();
 
-        if(!DbHelper.ClearLog(out string errorMessage))
+        (bool success, string errorMessage) = await DbHelper.ClearLog();
+
+        if(!success)
         {
-            Console.WriteLine($" Error while clearing log: {errorMessage}");
-            AddLog($"Error while clearing log: {errorMessage}");
+            Console.WriteLine($" DB error trying to clear log: {errorMessage}");
+            AddLog($"DB error trying to clear log: {errorMessage}");
         }
     }
 

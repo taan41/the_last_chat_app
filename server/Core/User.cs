@@ -21,6 +21,8 @@ class User
         UID = uid;
         PwdSet = pwdSet;
     }
+
+    public User(User userTemplate) : this(userTemplate.UID, userTemplate.Username, userTemplate.Nickname, userTemplate.PwdSet) {}
     
     public override string ToString()
         => $"ID: {UID}, Username: {Username}, Nickname: {Nickname}";
