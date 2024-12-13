@@ -11,7 +11,6 @@ class ClientHandler
     bool loggedIn = false;
     int uid;
     string? nickname;
-    User? user, partner;
     ChatGroupHandler? chatGroup;
 
     public ClientHandler(TcpClient _client)
@@ -30,6 +29,8 @@ class ClientHandler
         int bytesRead;
 
         Command? receivedCmd, cmdToSend = new();
+
+        User? user = null, partner = null;
 
         try
         {
@@ -164,8 +165,8 @@ class ClientHandler
     {
         if(user == null)
         {
-            cmdToSend.SetError("Server-side error while changing nickname");
-            LogManager.AddLog($"Error from {endPoint} changing nickname: Null user");
+            cmdToSend.SetError("Server-side error trying to change nickname");
+            LogManager.AddLog($"Error from {endPoint} trying to change nickname: Null user");
         }
         else
         {
@@ -179,7 +180,7 @@ class ClientHandler
                 return true;
             }
             else
-                Helper.ErrorHandler(errorMessage, endPoint, "set nickname", ref cmdToSend);
+                Helper.ErrorHandler(errorMessage, endPoint, "change nickname", ref cmdToSend);
         }
 
         return false;

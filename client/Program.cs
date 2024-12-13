@@ -38,6 +38,8 @@ class Client
                     WelcomeMenu(stream, out User? loggedInUser, out stopProgram);
                     if(stopProgram || loggedInUser == null)
                         return;
+
+                    UserMenu(stream, loggedInUser);
                 }
             }
             catch(Exception ex)
@@ -429,7 +431,7 @@ class Client
 
                     Write(" Enter nickname   : ");
                     string? nickname = null;
-                    switch(Misc.InputData(ref nickname, "Nickname", MagicNumbers.nicknameMin, MagicNumbers.nicknameMax, true))
+                    switch(Misc.InputData(ref nickname, "Nickname", MagicNumbers.nicknameMin, MagicNumbers.nicknameMax, false))
                     {
                         case null: return;
                         case true: break;
@@ -465,7 +467,7 @@ class Client
 
                     Write(" Enter username: ");
                     string? username = null;
-                    switch(Misc.InputData(ref username, "Username", MagicNumbers.nicknameMin, MagicNumbers.nicknameMax, true))
+                    switch(Misc.InputData(ref username, "Username", MagicNumbers.nicknameMin, MagicNumbers.nicknameMax, false))
                     {
                         case null: return;
                         case true: break;
@@ -542,7 +544,7 @@ class Client
 
                     Write(" Enter new nickname: ");
                     string? newNickname = null;
-                    switch(Misc.InputData(ref newNickname, "Nickname", MagicNumbers.nicknameMin, MagicNumbers.nicknameMax, true))
+                    switch(Misc.InputData(ref newNickname, "Nickname", MagicNumbers.nicknameMin, MagicNumbers.nicknameMax, false))
                     {
                         case null: return null;
                         case true: break;
