@@ -1,5 +1,6 @@
 using System.Data;
 using MySql.Data.MySqlClient;
+using Org.BouncyCastle.OpenSsl;
 
 static class DbHelper
 {
@@ -110,7 +111,7 @@ static class DbHelper
 
             using var reader = await cmd.ExecuteReaderAsync();
 
-            if(! await reader.ReadAsync()) // No same username found
+            if (! await reader.ReadAsync()) // No same username found
                 return (true, "");
             else
             {
@@ -130,7 +131,7 @@ static class DbHelper
         string query = "INSERT INTO Users (Username, Nickname, PasswordHash, Salt) VALUES (@username, @nickname, @pwdHash, @salt)";
         string errorMessage;
 
-        if(user.PwdSet == null)
+        if (user.PwdSet == null)
         {
             errorMessage = "Null user password";
             return (false, errorMessage);
@@ -172,13 +173,13 @@ static class DbHelper
 
             using var reader = await cmd.ExecuteReaderAsync();
 
-            if(! await reader.ReadAsync()) // User not found
+            if (! await reader.ReadAsync()) // User not found
             {
                 errorMessage = $"No user with username '{username}' found";
                 return (false, errorMessage, null);
             }
 
-            if(getPwd)
+            if (getPwd)
             {
                 byte[] pwdHash = new byte[MagicNumbers.pwdHashLen];
                 byte[] salt = new byte[MagicNumbers.pwdSaltLen];
@@ -186,25 +187,84 @@ static class DbHelper
                 reader.GetBytes("PasswordHash", 0, pwdHash, 0, MagicNumbers.pwdHashLen);
                 reader.GetBytes("Salt", 0, salt, 0, MagicNumbers.pwdSaltLen);
 
-                return (true, "", new(
-                    reader.GetInt32("UserID"), 
-                    reader.GetString("Username"), 
-                    reader.GetString("Nickname"), 
-                    new(pwdHash, salt)));
+                return (true, "", new()
+                {
+                    UID = reader.GetInt32("UserID"),
+                    Username = reader.GetString("Username"),
+                    Nickname = reader.GetString("Nickname"),
+                    PwdSet = new(pwdHash, salt)
+                });
             }
             else
             {
-                return (true, "", new(
-                    reader.GetInt32("UserID"), 
-                    reader.GetString("Username"), 
-                    reader.GetString("Nickname"), 
-                    null));
+                return (true, "", new()
+                {
+                    UID = reader.GetInt32("UserID"),
+                    Username = reader.GetString("Username"),
+                    Nickname = reader.GetString("Nickname"),
+                    PwdSet = null
+                });
             }
         }
         catch (MySqlException ex)
         {
             errorMessage = ex.Message;
             return (false, errorMessage, null);
+        }
+    }
+    
+    public static async Task<(List<User>? users, string errorMessage)> GetAllUser(bool getPwd)
+    {
+        string query = getPwd ?
+            "SELECT UserID, Username, Nickname, PasswordHash, Salt FROM Users ORDER BY UserID" :
+            "SELECT UserID, Username, Nickname FROM Users ORDER BY UserID";
+
+        List<User> users = [];
+        
+        try
+        {
+            using MySqlConnection conn = new(connectionString);
+            await conn.OpenAsync();
+
+            using MySqlCommand cmd = new(query, conn);
+            
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+
+                if (getPwd)
+                {
+                    byte[] pwdHash = new byte[MagicNumbers.pwdHashLen];
+                    byte[] salt = new byte[MagicNumbers.pwdSaltLen];
+
+                    reader.GetBytes("PasswordHash", 0, pwdHash, 0, MagicNumbers.pwdHashLen);
+                    reader.GetBytes("Salt", 0, salt, 0, MagicNumbers.pwdSaltLen);
+
+                    users.Add(new()
+                    {
+                        UID = reader.GetInt32("UserID"),
+                        Username = reader.GetString("Username"),
+                        Nickname = reader.GetString("Nickname"),
+                        PwdSet = new(pwdHash, salt)
+                    });
+                }
+                else
+                {
+                    users.Add(new()
+                    {
+                        UID = reader.GetInt32("UserID"),
+                        Username = reader.GetString("Username"),
+                        Nickname = reader.GetString("Nickname"),
+                        PwdSet = null
+                    });
+                }
+            }
+
+            return (users, "");
+        }
+        catch (MySqlException ex)
+        {
+            return (null, ex.Message);
         }
     }
 
@@ -282,7 +342,7 @@ static class DbHelper
 
             using var reader = await cmd.ExecuteReaderAsync();
 
-            if(! await reader.ReadAsync()) // User not found
+            if (! await reader.ReadAsync()) // User not found
             {
                 errorMessage = $"No chat group with ID '{groupID}' found";
                 return (false, errorMessage, null);
@@ -300,12 +360,43 @@ static class DbHelper
             return (false, errorMessage, null);
         }
     }
+    
+    public static async Task<(List<ChatGroup>? groups, string errorMessage)> GetAllChatGroup()
+    {
+        string query = "SELECT GroupID, GroupName, CreatorID, CreatedTime FROM ChatGroups ORDER BY GroupID";
+
+        List<ChatGroup> groups = [];
+        
+        try
+        {
+            using MySqlConnection conn = new(connectionString);
+            await conn.OpenAsync();
+
+            using MySqlCommand cmd = new(query, conn);
+            
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                groups.Add(new(reader.GetString("GroupName"), reader.GetInt32("CreatorID"))
+                {
+                    GroupID = reader.GetInt32("GroupID"),
+                    CreatedTime = reader.GetDateTime("CreatedTime")
+                });
+            }
+
+            return (groups, "");
+        }
+        catch (MySqlException ex)
+        {
+            return (null, ex.Message);
+        }
+    }
 
     public static async Task<(bool success, string errorMessage)> UpdateChatGroup(ChatGroup updatedGroup)
     {
         string errorMessage;
 
-        if(updatedGroup.GroupID == null)
+        if (updatedGroup.GroupID == null)
         {
             errorMessage = "Null GroupID";
             return (false, errorMessage);
@@ -527,12 +618,9 @@ static class DbHelper
             using MySqlCommand cmd = new(query, conn);
             
             using var reader = await cmd.ExecuteReaderAsync();
-            while (reader.Read())
+            while (await reader.ReadAsync())
             {
-                DateTime timestamp = reader.GetDateTime("LogTime");
-                string content = reader.GetString("Content");
-
-                logList.Add(new(timestamp, content));
+                logList.Add(new(reader.GetDateTime("LogTime"), reader.GetString("Content")));
             }
 
             return (logList, "");

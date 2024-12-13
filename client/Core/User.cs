@@ -10,19 +10,13 @@ class User
 
     public User() {}
 
-    public User(string username, string nickname)
+    public User(User userTemplate)
     {
-        Username = username;
-        Nickname = nickname;
+        UID = userTemplate.UID;
+        Username = userTemplate.Username;
+        Nickname = userTemplate.Nickname;
+        PwdSet = userTemplate.PwdSet;
     }
-
-    public User(int? uid, string username, string nickname, PasswordSet? pwdSet) : this(username, nickname)
-    {
-        UID = uid;
-        PwdSet = pwdSet;
-    }
-
-    public User(User userTemplate) : this(userTemplate.UID, userTemplate.Username, userTemplate.Nickname, userTemplate.PwdSet) {}
     
     public override string ToString()
         => $"[ID: {UID}] Username: {Username}, Nickname: {Nickname}";
