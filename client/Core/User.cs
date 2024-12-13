@@ -21,9 +21,14 @@ class User
         UID = uid;
         PwdSet = pwdSet;
     }
+
+    public User(User userTemplate) : this(userTemplate.UID, userTemplate.Username, userTemplate.Nickname, userTemplate.PwdSet) {}
     
     public override string ToString()
-        => $"ID: {UID}, Username: {Username}, Nickname: {Nickname}";
+        => $"[ID: {UID}] Username: {Username}, Nickname: {Nickname}";
+
+    public string ToString(bool showUsername)
+        => showUsername ? ToString(true) : $"[ID: {UID}] Nickname: {Nickname}";
     
     public static string Serialize(User user) =>
         JsonSerializer.Serialize(user);

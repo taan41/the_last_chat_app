@@ -10,7 +10,7 @@ class ChatGroup(string groupName, int? creatorID)
     public int? ConnectedNum { get; set; }
     
     public override string ToString()
-        => $"[ID: {GroupID:D3}] {GroupName} ({ConnectedNum} connected)";
+        => $"[ID: {GroupID:D3}] {GroupName} ({ConnectedNum} online)";
 
     public string ToString(bool showConnectedNum)
         => showConnectedNum ? ToString() : $"$[ID: {GroupID:D3}] {GroupName}";

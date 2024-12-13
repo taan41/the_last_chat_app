@@ -433,7 +433,7 @@ static class DbHelper
             cmd.Parameters.AddWithValue("@receiverID", receiverID);
             
             using var reader = await cmd.ExecuteReaderAsync();
-            while (reader.Read())
+            while (await reader.ReadAsync())
             {
                 DateTime timestamp = reader.GetDateTime("Timestamp");
                 string nickname = reader.GetString("Nickname");
@@ -473,7 +473,7 @@ static class DbHelper
             cmd.Parameters.AddWithValue("@groupID", groupID);
             
             using var reader = await cmd.ExecuteReaderAsync();
-            while (reader.Read())
+            while (await reader.ReadAsync())
             {
                 DateTime timestamp = reader.GetDateTime("Timestamp");
                 string nickname = reader.GetString("Nickname");

@@ -141,14 +141,53 @@ class Client
     static void UserMenu(NetworkStream stream, User loggedInUser)
     {
         byte[] buffer = new byte[MagicNumbers.bufferSize];
-        string? nickname = loggedInUser.Nickname;
-        Command receivedCmd, cmdToSend = new();
+        Command cmdToSend = new();
 
         while (true)
         {
-            Helper.ShowMenu.UserMenu(nickname);
+            Helper.ShowMenu.UserMenu(loggedInUser.Nickname);
 
-            switch (ReadLine())
+            switch (IOHelper.ReadInput(false))
+            {
+                case "1":
+                    Helper.ClientAction.ChangeNickname(stream, ref loggedInUser);
+                    continue;
+
+                case "2":
+                    Helper.ClientAction.ChangePassword(stream, ref loggedInUser);
+                    continue;
+
+                case "3":
+                    // string? roomName = JoinChatRoom(stream);
+                    // if (roomName == null) continue;
+
+                    // Chatting(stream, roomName, nickname);
+
+                    // EncryptAndSend(stream, Command.ExitRoom, []);
+                    continue;
+
+                case "0": case null:
+                    WriteLine(" Logging out...");
+                    cmdToSend.Set(CommandType.Logout, null);
+                    Helper.CommandHandler.Stream(stream, buffer, cmdToSend, out _);
+                    return;
+
+                default:
+                    continue;
+            }
+        }
+    }
+
+    static void GroupMsgMenu(NetworkStream stream, User loggedInUser)
+    {
+        byte[] buffer = new byte[MagicNumbers.bufferSize];
+        Command cmdToSend = new();
+
+        while (true)
+        {
+            Helper.ShowMenu.UserMenu(loggedInUser.Nickname);
+
+            switch (IOHelper.ReadInput(false))
             {
                 case "1":
                     Helper.ClientAction.ChangeNickname(stream, ref loggedInUser);
@@ -696,6 +735,78 @@ class Client
                 WriteLine(" 3. Private message");
                 WriteLine(" 4. Group message");
                 WriteLine(" 0. Logout");
+                IOHelper.WriteBorder();
+                Write(" Enter Choice: ");
+            }
+
+            public static void PrivateMsgMenu(List<User> users, int page)
+            {
+                Clear();
+                IOHelper.WriteHeader("Zelo");
+                WriteLine($" List of registered users (Page {page + 1}/{users.Count / 10 + 1}):");
+
+                foreach(User user in users.GetRange(page * 10, 10))
+                {
+                    WriteLine($" • {user.ToString(false)}");
+                }
+
+                IOHelper.WriteBorder();
+                WriteLine(" 1. Enter ID of partner");
+                WriteLine(" 8. Previous page");
+                WriteLine(" 9. Next page");
+                WriteLine(" 0. Return");
+                IOHelper.WriteBorder();
+                Write(" Enter Choice: ");
+            }
+
+            public static void GroupMsgMenu()
+            {
+                Clear();
+                IOHelper.WriteHeader("Zelo");
+                WriteLine(" 1. View chat group list & Join one");
+                WriteLine(" 2. Create & Manage created chat group(s)");
+                WriteLine(" 0. Return");
+                IOHelper.WriteBorder();
+                Write(" Enter Choice: ");
+            }
+
+            public static void JoinGroupMenu(List<ChatGroup> groups, int page)
+            {
+                Clear();
+                IOHelper.WriteHeader("Zelo");
+                WriteLine($" List of chat groups (Page {page + 1}/{groups.Count / 10 + 1}):");
+
+                foreach(ChatGroup group in groups.GetRange(page * 10, 10))
+                {
+                    WriteLine($" • {group.ToString(true)}");
+                }
+
+                IOHelper.WriteBorder();
+                WriteLine(" 1. Join chat group using ID");
+                WriteLine(" 8. Previous page");
+                WriteLine(" 9. Next page");
+                WriteLine(" 0. Return");
+                IOHelper.WriteBorder();
+                Write(" Enter Choice: ");
+            }
+
+            public static void ManageGroupMenu(List<ChatGroup> groups, int page)
+            {
+                Clear();
+                IOHelper.WriteHeader("Zelo");
+                WriteLine($" List of created chat groups (Page {page + 1}/{groups.Count / 10 + 1}):");
+
+                foreach(ChatGroup group in groups.GetRange(page * 10, 10))
+                {
+                    WriteLine($" • {group.ToString(true)}");
+                }
+
+                IOHelper.WriteBorder();
+                WriteLine(" 1. Create new chat group");
+                WriteLine(" 2. Delete chat group using ID");
+                WriteLine(" 8. Previous page");
+                WriteLine(" 9. Next page");
+                WriteLine(" 0. Return");
                 IOHelper.WriteBorder();
                 Write(" Enter Choice: ");
             }

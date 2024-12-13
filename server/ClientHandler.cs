@@ -34,12 +34,8 @@ class ClientHandler
             Command? receivedCmd, cmdToSend = new();
             User? user = null, partner = null, tempUser = null;
 
-            while(!token.IsCancellationRequested)
+            while((bytesRead = await stream.ReadAsync(memory, token)) > 0)
             {
-                bytesRead = await stream.ReadAsync(memory, token);
-                if(bytesRead <= 0)
-                    continue;
-
                 receivedCmd = Command.Deserialize(DecodeBytes(buffer, 0, bytesRead));
 
                 switch (receivedCmd?.CommandType)

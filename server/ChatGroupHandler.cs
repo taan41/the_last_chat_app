@@ -1,12 +1,9 @@
-class ChatGroupHandler(int _id, string _name)
+class ChatGroupHandler(ChatGroup? _chatGroup)
 {
+    private readonly ChatGroup? chatGroup = _chatGroup;
     private readonly List<ClientHandler> connectedClients = [];
-    
-    private int id = _id;
-    private string name = _name;
 
-    public int ID { get => id; set => id = value; }
-    public string Name { get => name; set => name = value; }
+    public ChatGroup? GetGroup => chatGroup;
 
     public async Task SendMessageToRoom(int senderID, string message)
     {
@@ -17,18 +14,20 @@ class ChatGroupHandler(int _id, string _name)
     public void AddClientToRoom(ClientHandler client)
     {
         lock(connectedClients)
+        {
             connectedClients.Add(client);
+            if(chatGroup != null)
+                chatGroup.ConnectedNum = connectedClients.Count;
+        }
     }
 
     public void RemoveClientFromRoom(ClientHandler client)
     {
         lock(connectedClients)
+        {
             connectedClients.Remove(client);
+            if(chatGroup != null)
+                chatGroup.ConnectedNum = connectedClients.Count;
+        }
     }
-
-    public override string ToString()
-        => ToString(false);
-
-    public string ToString(bool showConnectedCount)
-        => $"{Name}{(showConnectedCount ? $" ({connectedClients.Count} connected)" : "")}";
 }
