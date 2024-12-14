@@ -488,9 +488,9 @@ static class DbHelper
         }
     }
 
-    public static async Task<(bool success, string errorMessage)> SavePrivateMessage(Message message)
+    public static async Task<(bool success, string errorMessage)> SaveMessage(Message message)
     {
-        string query = "INSERT INTO Messages (SenderID, ReceiverID, Content) VALUES (@senderID, @receiverID, @message)";
+        string query = "INSERT INTO Messages (SenderID, ReceiverID, GroupID, Content) VALUES (@senderID, @receiverID, @groupID, @message)";
 
         try
         {    
@@ -500,28 +500,6 @@ static class DbHelper
             using MySqlCommand cmd = new(query, conn);
             cmd.Parameters.AddWithValue("@senderID", message.SenderID);
             cmd.Parameters.AddWithValue("@receiverID", message.ReceiverID);
-            cmd.Parameters.AddWithValue("@message", message.Content);
-
-            await cmd.ExecuteNonQueryAsync();
-            return (true, "");
-        }
-        catch (MySqlException ex)
-        {
-            return (false, ex.Message);
-        }
-    }
-
-    public static async Task<(bool success, string errorMessage)> SaveGroupMessage(Message message)
-    {
-        string query = "INSERT INTO Messages (SenderID, GroupID, Content) VALUES (@senderID, @groupID, @message)";
-
-        try
-        {    
-            using MySqlConnection conn = new(connectionString);
-            await conn.OpenAsync();
-
-            using MySqlCommand cmd = new(query, conn);
-            cmd.Parameters.AddWithValue("@senderID", message.SenderID);
             cmd.Parameters.AddWithValue("@groupID", message.GroupID);
             cmd.Parameters.AddWithValue("@message", message.Content);
 

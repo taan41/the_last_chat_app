@@ -26,7 +26,7 @@ class ChatGroupHandler
 
     public async Task EchoMessage(Message message, ClientHandler sourceClient)
     {
-        await DbHelper.SaveGroupMessage(message);
+        await DbHelper.SaveMessage(message);
 
         foreach (ClientHandler client in connectedClients)
             if(client != sourceClient)
@@ -49,7 +49,7 @@ class ChatGroupHandler
             }
             else if(memberIDs != null)
             {
-                LogManager.AddLog($"{client.EndPoint} connected to private chat of '{memberIDs}");
+                LogManager.AddLog($"{client.EndPoint} connected to private chat of {memIDsToString()}");
             }
         }
     }
@@ -68,13 +68,13 @@ class ChatGroupHandler
             }
             else if(memberIDs != null)
             {
-                LogManager.AddLog($"{client.EndPoint} disconnected from private chat of '{memberIDs}");
+                LogManager.AddLog($"{client.EndPoint} disconnected from private chat of {memIDsToString()}");
             }
 
             if(connectedClients.Count == 0)
             {
                 disposeAction(this);
-                LogManager.AddLog($"Handler of group '{chatGroup?.ToString(false) ?? memberIDs!.ToString()}' auto-disposed");
+                LogManager.AddLog($"Handler of group '{chatGroup?.ToString(false) ?? memIDsToString()}' auto-disposed");
             }
         }
     }
@@ -94,6 +94,9 @@ class ChatGroupHandler
         }
 
         disposeAction(this);
-        LogManager.AddLog($"Handler of group '{chatGroup?.ToString(false) ?? memberIDs!.ToString()}' got disposed");
+        LogManager.AddLog($"Handler of group '{chatGroup?.ToString(false) ?? memIDsToString()}' got disposed");
     }
+
+    private string memIDsToString()
+        => $"'{memberIDs?[0]}' & '{memberIDs?[1]}'";
 }

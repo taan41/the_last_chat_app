@@ -414,12 +414,14 @@ static class ClientHelper
                 catch (FormatException)
                 {
                     WriteLine(" Error: Invalid ID");
+                    ReadKey(true);
                     continue;
                 }
 
                 if(partnerID == mainUserID)
                 {
                     WriteLine(" Error: Can't message to self");
+                    ReadKey(true);
                     continue;
                 }
 
