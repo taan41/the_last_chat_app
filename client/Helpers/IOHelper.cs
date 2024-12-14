@@ -39,7 +39,7 @@ static class IOHelper
     // /// </summary>
     // public static void RestoreLineCursor() => SetCursorPosition(0, CursorTop);
 
-    public static void MoveCursorLeft(int charAmount)
+    public static void MoveCursor(int charAmount)
     {
         int targetLeft = CursorLeft + charAmount;
         int targetTop = CursorTop;
@@ -80,9 +80,9 @@ static class IOHelper
     /// <param name="intercept"> Whether to hide input as '*'. </param>
     /// <returns> A string representing user's input when ENTER key is pressed, null when ESC key is pressed. </returns>
     public static string? ReadInput(int? limit, bool intercept)
-        => ReadInput(new(), limit, intercept);
+        => ReadInput(new(), false, limit, intercept);
 
-    public static string? ReadInput(StringBuilder sb, int? limit, bool intercept)
+    public static string? ReadInput(StringBuilder sb, bool clearAfterwards, int? limit, bool intercept)
     {
         bool done = false;
         int index = 0, startCursorLeft = CursorLeft;
@@ -114,7 +114,7 @@ static class IOHelper
                 case ConsoleKey.LeftArrow:
                     if(index > 0)
                     {
-                        MoveCursorLeft(-1);
+                        MoveCursor(-1);
                         index--;
                     }
                     break;
@@ -122,7 +122,7 @@ static class IOHelper
                 case ConsoleKey.RightArrow:
                     if(index < sb.Length)
                     {
-                        MoveCursorLeft(1);
+                        MoveCursor(1);
                         index++;
                     }
                     break;
@@ -130,12 +130,12 @@ static class IOHelper
                 case ConsoleKey.UpArrow:
                     if(index > WindowWidth)
                     {
-                        MoveCursorLeft(-WindowWidth);
+                        MoveCursor(-WindowWidth);
                         index -= WindowWidth;
                     }
                     else
                     {
-                        MoveCursorLeft(-index);
+                        MoveCursor(-index);
                         index = 0;
                     }
                     break;
@@ -143,12 +143,12 @@ static class IOHelper
                 case ConsoleKey.DownArrow:
                     if(sb.Length - index > WindowWidth)
                     {
-                        MoveCursorLeft(WindowWidth);
+                        MoveCursor(WindowWidth);
                         index += WindowWidth;
                     }
                     else
                     {
-                        MoveCursorLeft(sb.Length - index);
+                        MoveCursor(sb.Length - index);
                         index = sb.Length;
                     }
                     break;
@@ -160,11 +160,18 @@ static class IOHelper
             }
         }
 
-        MoveCursorLeft(-index);
         string result = sb.ToString();
         sb.Clear();
+        
+        MoveCursor(-index);
+        if (clearAfterwards)
+        {
+            Write(new string(' ', result.Length));
+            MoveCursor(-result.Length);
+        }
+        else
+            WriteLine(intercept ? new string('*', result.Length) : result);
 
-        WriteLine(intercept ? new string('*', result.Length) : result);
         return result;
     }
 
@@ -178,13 +185,13 @@ static class IOHelper
         {
             sb.Remove(0, index);
             removedLength = index;
-            MoveCursorLeft(-index);
+            MoveCursor(-index);
             index = 0;
         }
         else
         {
             sb.Remove(--index, 1);
-            MoveCursorLeft(-1);
+            MoveCursor(-1);
         }
 
         (int oldLeft, int oldTop) = GetCursorPosition();
@@ -203,10 +210,10 @@ static class IOHelper
         {
             Write(displayChar);
             Write(intercept ? new string('*', sb.Length - index) : sb.ToString()[index ..]);
-            MoveCursorLeft(index - sb.Length);
+            MoveCursor(index - sb.Length);
 
             if((sb.Length + startCursorLeft) % WindowWidth == 0)
-                MoveCursorLeft(1);
+                MoveCursor(1);
         }
         else if(CursorLeft + 1 == BufferWidth)
             WriteLine(displayChar);

@@ -8,8 +8,9 @@ enum CommandType
     ChangeNickname, ChangePassword,
     RequestUserList, UserAsPartner, GetPartnerHistory, DeletePartner,
     RequestCreatedGroups, CreateGroup, DeleteGroup,
-    RequestGroupList, JoinGroup, GetGroupHistory, LeaveGroup,
-    Message, MessageEcho, RefreshGroupInfo,
+    RequestGroupList, RequestGroupInfo, RequestGroupHistory, 
+    JoinGroup, LeaveGroup,
+    Message, MessageEcho,
     Disconnect
 }
 

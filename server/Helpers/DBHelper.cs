@@ -78,7 +78,7 @@ static class DbHelper
                 SenderID INT NOT NULL,
                 ReceiverID INT DEFAULT NULL,
                 GroupID INT DEFAULT NULL,
-                MessageText TEXT CHARACTER SET utf8mb4 NOT NULL,
+                Content TEXT CHARACTER SET utf8mb4 NOT NULL,
                 FOREIGN KEY (SenderID) REFERENCES Users(UserID) ON DELETE CASCADE,
                 FOREIGN KEY (ReceiverID) REFERENCES Users(UserID) ON DELETE CASCADE,
                 FOREIGN KEY (GroupID) REFERENCES ChatGroups(GroupID) ON DELETE CASCADE
@@ -151,7 +151,7 @@ static class DbHelper
         }
     }
 
-    public static async Task<(bool success, string errorMessage, User? requestedUser)> GetUser(string username, bool getPwd)
+    public static async Task<(User? requestedUser, string errorMessage)> GetUser(string username, bool getPwd)
     {
         string query = "SELECT UserID, Username, Nickname, PasswordHash, Salt FROM Users WHERE Username=@username";
 
@@ -166,7 +166,7 @@ static class DbHelper
             using var reader = await cmd.ExecuteReaderAsync();
 
             if (! await reader.ReadAsync()) // User not found
-                return (false, $"No user with username '{username}' found", null);
+                return (null, $"No user with username '{username}' found");
 
             if (getPwd)
             {
@@ -176,28 +176,28 @@ static class DbHelper
                 reader.GetBytes("PasswordHash", 0, pwdHash, 0, MagicNumbers.pwdHashLen);
                 reader.GetBytes("Salt", 0, salt, 0, MagicNumbers.pwdSaltLen);
 
-                return (true, "", new()
+                return (new()
                 {
                     UID = reader.GetInt32("UserID"),
                     Username = reader.GetString("Username"),
                     Nickname = reader.GetString("Nickname"),
                     PwdSet = new(pwdHash, salt)
-                });
+                }, "");
             }
             else
             {
-                return (true, "", new()
+                return (new()
                 {
                     UID = reader.GetInt32("UserID"),
                     Username = reader.GetString("Username"),
                     Nickname = reader.GetString("Nickname"),
                     PwdSet = null
-                });
+                }, "");
             }
         }
         catch (MySqlException ex)
         {
-            return (false, ex.Message, null);
+            return (null, ex.Message);
         }
     }
     
@@ -459,7 +459,7 @@ static class DbHelper
 
     public static async Task<(bool success, string errorMessage)> SavePrivateMessage(Message message)
     {
-        string query = "INSERT INTO Messages (SenderID, ReceiverID, MessageText) VALUES (@senderID, @receiverID, @message)";
+        string query = "INSERT INTO Messages (SenderID, ReceiverID, Content) VALUES (@senderID, @receiverID, @message)";
 
         try
         {    
@@ -482,7 +482,7 @@ static class DbHelper
 
     public static async Task<(bool success, string errorMessage)> SaveGroupMessage(Message message)
     {
-        string query = "INSERT INTO Messages (SenderID, GroupID, MessageText) VALUES (@senderID, @groupID, @message)";
+        string query = "INSERT INTO Messages (SenderID, GroupID, Content) VALUES (@senderID, @groupID, @message)";
 
         try
         {    
@@ -509,7 +509,7 @@ static class DbHelper
             @"SELECT
                 m.SentTime,
                 u.Nickname,
-                m.MessageText
+                m.Content
             FROM Messages m
             JOIN Users u ON m.SenderID = u.UserID
             WHERE (m.SenderID = @senderID AND m.ReceiverID = @receiverID)
@@ -530,9 +530,9 @@ static class DbHelper
             using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
-                DateTime timestamp = reader.GetDateTime("Timestamp");
+                DateTime timestamp = reader.GetDateTime("SentTime");
                 string nickname = reader.GetString("Nickname");
-                string message = reader.GetString("MessageText");
+                string message = reader.GetString("Content");
 
                 messages.Add(new(timestamp, nickname, message));
             }
@@ -545,13 +545,13 @@ static class DbHelper
         }
     }
 
-    public static async Task<(List<Message>? requestedMsgList, string errorMessage)> GetGroupMessageHistory(int groupID)
+    public static async Task<(List<Message>? requestedMsgList, string errorMessage)> GetGroupHistory(int groupID)
     {
         string query = 
             @"SELECT
                 m.SentTime,
                 u.Nickname,
-                m.MessageText
+                m.Content
             FROM Messages m
             JOIN Users u ON m.SenderId = u.UserId
             WHERE m.GroupID = @groupID
@@ -570,9 +570,9 @@ static class DbHelper
             using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
-                DateTime timestamp = reader.GetDateTime("Timestamp");
+                DateTime timestamp = reader.GetDateTime("SentTime");
                 string nickname = reader.GetString("Nickname");
-                string message = reader.GetString("MessageText");
+                string message = reader.GetString("Content");
 
                 messages.Add(new(timestamp, nickname, message));
             }

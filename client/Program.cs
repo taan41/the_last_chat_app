@@ -56,8 +56,8 @@ class Client
             }
             catch(Exception ex)
             {
-                // WriteLine($" Error: ({ex.GetType().Name}) {ex.Message}");
-                WriteLine(ex);
+                WriteLine($" Error: ({ex.GetType().Name}) {ex.Message}");
+                // WriteLine(ex);
                 ReadKey(true);
             }
         }
@@ -131,13 +131,13 @@ class Client
             switch(IOHelper.ReadInput(false))
             {
                 case "1":
-                    Helper.ClientAction.Register(stream);
-                    continue;
-
-                case "2":
                     Helper.ClientAction.Login(stream, out loggedInUser);
                     if (loggedInUser != null)
                         return;
+                    continue;
+
+                case "2":
+                    Helper.ClientAction.Register(stream);
                     continue;
 
                 case "0": case null:
@@ -181,7 +181,7 @@ class Client
                 case "0": case null:
                     WriteLine(" Logging out...");
                     cmdToSend.Set(CommandType.Logout, null);
-                    Helper.CommandHandler.Stream(stream, ref buffer, cmdToSend, out _);
+                    Helper.CommandHandler.SendAndHandle(stream, ref buffer, cmdToSend, out _);
                     return;
 
                 default:
@@ -227,7 +227,7 @@ class Client
             // Get list of all available groups
             cmdToSend.Set(CommandType.RequestGroupList, null);
 
-            if (Helper.CommandHandler.Stream(stream, ref buffer, cmdToSend, out Command receivedCmd))
+            if (Helper.CommandHandler.SendAndHandle(stream, ref buffer, cmdToSend, out Command receivedCmd))
             {
                 groups = JsonSerializer.Deserialize<List<ChatGroup>>(receivedCmd.Payload);
 
@@ -246,7 +246,7 @@ class Client
             switch (IOHelper.ReadInput(false))
             {
                 case "1":
-                    Helper.ClientAction.GetGroupInfo(stream, groups, curPage, out ChatGroup? joinedGroup);
+                    Helper.ClientAction.JoinGroupMenu(stream, groups, curPage, out ChatGroup? joinedGroup);
 
                     if(joinedGroup != null)
                     {
@@ -254,7 +254,7 @@ class Client
                     }
 
                     cmdToSend.Set(CommandType.LeaveGroup, null);
-                    Helper.CommandHandler.Stream(stream, ref buffer, cmdToSend, out _);
+                    Helper.CommandHandler.SendAndHandle(stream, ref buffer, cmdToSend, out _);
                     continue;
 
                 case "8":
@@ -284,7 +284,7 @@ class Client
         // Get list of groups created by currently logged-in user
         Command cmdToSend = new(CommandType.RequestCreatedGroups, loggedInUser.UID.ToString());
 
-        if (Helper.CommandHandler.Stream(stream, ref buffer, cmdToSend, out Command receivedCmd))
+        if (Helper.CommandHandler.SendAndHandle(stream, ref buffer, cmdToSend, out Command receivedCmd))
         {
             groups = JsonSerializer.Deserialize<List<ChatGroup>>(receivedCmd.Payload);
 
@@ -305,7 +305,7 @@ class Client
             switch (IOHelper.ReadInput(false))
             {
                 case "1":
-                    Helper.ClientAction.CreateChatGroup(stream, (int) loggedInUser.UID!, groups, curPage);
+                    Helper.ClientAction.CreateChatGroup(stream, loggedInUser.UID, groups, curPage);
                     break;
 
                 case "2":
@@ -332,7 +332,7 @@ class Client
             // Refresh list after creating/deleting
             cmdToSend.Set(CommandType.RequestCreatedGroups, loggedInUser.UID.ToString());
 
-            if (Helper.CommandHandler.Stream(stream, ref buffer, cmdToSend, out receivedCmd))
+            if (Helper.CommandHandler.SendAndHandle(stream, ref buffer, cmdToSend, out receivedCmd))
             {
                 groups = JsonSerializer.Deserialize<List<ChatGroup>>(receivedCmd.Payload);
 
@@ -354,188 +354,90 @@ class Client
 
     }
 
-    /*
-    static void CreateChatRoom(NetworkStream stream)
-    {
-        bool roomCreated = false;
-
-        while (!roomCreated && serverRunning)
-        {
-            Clear();
-            IOHelper.WriteHeader("Zelo");
-            Write(" Enter room name (30 characters max): ");
-
-            string? roomName;
-            WriteLine(roomName = ReadInput(null, true));
-
-            if (roomName == null) return;
-            if (string.IsNullOrWhiteSpace(roomName) || roomName.Length > 30)
-            {
-                WriteLine(" Invalid name.");
-                continue;
-            }
-
-            EncryptAndSend(stream, Command.CreateRoom, Encode(roomName));
-
-            roomCreated = ReceiveResponse(stream, Command.CreateRoom, out string response);
-            WriteLine($" {response}");
-
-            ReadKey(true);
-            break;
-        }
-    }
-
-    static string? JoinChatRoom(NetworkStream stream)
-    {
-        string? roomName = "";
-        bool roomJoined = false;
-
-        while(!roomJoined && serverRunning)
-        {
-            Clear();
-            IOHelper.WriteHeader("Zelo");
-            WriteLine(" List of rooms:");
-
-            EncryptAndSend(stream, Command.RequestRoom, []);
-            
-            byte[] buffer = new byte[bufferSize];
-            int bytesRead = stream.Read(buffer);
-
-            string[] roomNames = Decode(DecryptAES(buffer.Take(bytesRead).Skip(4).ToArray(), _aes.Key, _aes.IV)).Split('|').OrderBy(name => name).ToArray();
-            
-            for(int i = 0, count = 1; i < roomNames.Length; i++)
-                WriteLine($" {count++:00}. {roomNames[i]}");
-
-            IOHelper.WriteBorder();
-            Write(" Enter room name: ");
-            WriteLine(roomName = ReadInput(null, true));
-            
-            if (roomName == null) return null;
-            EncryptAndSend(stream, Command.RequestRoom, Encode(roomName));
-
-            roomJoined = ReceiveResponse(stream, Command.RequestRoom, out string response);
-            WriteLine($" {response}");
-
-            ReadKey(true);
-        }
-
-        return roomName;
-    }
-
-    static void Chatting(NetworkStream stream, string roomName, string nickname)
-    {
-        using CancellationTokenSource exitRoomTokenSrc = new();
-        string inputPrompt = $"[{nickname}] > ";
-        string? input;
-
-        Clear();
-        IOHelper.WriteHeader("Zelo");
-        WriteLine($" <{roomName}>");
-        IOHelper.WriteBorder();
-
-        _ = Task.Run(() => ReceiveMsg(stream, nickname, exitRoomTokenSrc.Token));
-
-        while (true)
-        {
-            input = ReadInput(inputPrompt, false);
-
-            if (!serverRunning)
-            {
-                WriteLine(" Server is down.");
-                return;
-            }
-
-            if (!string.IsNullOrWhiteSpace(input))
-            {
-                EncryptAndSend(stream, Command.Message, Encode(input));
-            }
-            else if (input == null)
-            {
-                exitRoomTokenSrc.Cancel();
-                exitRoomTokenSrc.Dispose();
-                return;
-            }
-        }
-
-    }
-
-    static async Task ReceiveMsg(NetworkStream stream, string nickname, CancellationToken exitRoomToken)
-    {
-        byte[] buffer = new byte[bufferSize];
-        Memory<byte> memory = new(buffer);
-        int bytesRead;
-        string response, inputPrompt = $"[{nickname}] > ";
-        Command command;
-        
-        try
-        {
-            while(serverRunning && (bytesRead = await stream.ReadAsync(memory, exitRoomToken)) > 0)
-            {
-                exitRoomToken.ThrowIfCancellationRequested();
-
-                command = CommandConverter(buffer.AsSpan(0, 4));
-                response = Decode(DecryptAES(buffer.Take(bytesRead).Skip(4).ToArray(), _aes.Key, _aes.IV));
-
-                switch(command)
-                {
-                    case Command.Message:
-                        WriteMessage(response, inputPrompt);
-                        continue;
-
-                    case Command.ExitRoom:
-                        return;
-                    
-                    case Command.Error:
-                        WriteMessage($" Error from server: {response}", null);
-                        continue;
-
-                    default:
-                        WriteMessage($" Unknown command received {(int) command}", null);
-                        continue;
-                }
-            }
-
-            serverRunning = false;
-        }
-        catch(OperationCanceledException) {}
-        catch(Exception ex) when(serverRunning)
-        {
-            WriteLine($" Error while receiving msg: ({ex.GetType().Name}) {ex.Message}", null);
-            ReadKey(true);
-        }
-    }
-
-    static bool ReceiveResponse(NetworkStream stream, Command command, out string response)
-    {
-        stream.Flush();
-        byte[] buffer = new byte[bufferSize];
-        int bytesRead = stream.Read(buffer);
-
-        Command responseCmd = CommandConverter(buffer.AsSpan(0, 4));
-        response = Decode(DecryptAES(buffer.Take(bytesRead).Skip(4).ToArray(), _aes.Key, _aes.IV));
-
-        return responseCmd == command;
-    }
-
-    public static void EncryptAndSend(NetworkStream stream, Command command, byte[] data)
-    {
-        try
-        {
-            byte[] dataToSend = [.. CommandConverter(command), .. EncryptAES(data, _aes.Key, _aes.IV)];
-            stream.Flush();
-            stream.Write(dataToSend);
-        }
-        catch (Exception ex)
-        {
-            WriteLine($" Error while sending data: {ex.Message}");
-        }
-    }
-    */
-
     private static class Helper
     {
         public static class ClientAction
         {
+            public static void Login(NetworkStream stream, out User? loggedInUser)
+            {
+                byte[] buffer = new byte[MagicNum.bufferSize];
+                Command cmdToSend = new();
+                PasswordSet? pwdSet;
+                loggedInUser = null;
+                
+                while(true)
+                {
+                    ShowMenu.WelcomeMenu();
+                    WriteLine("1");
+                    IOHelper.WriteBorder();
+                    WriteLine(" < Press ESC to cancel >");
+
+                    Write(" Enter username: ");
+                    string username = "";
+                    switch(Misc.InputData(ref username, "Username", MagicNum.nicknameMin, MagicNum.nicknameMax, false))
+                    {
+                        case null: return;
+                        case true: break;
+                        case false: continue;
+                    }
+
+                    cmdToSend.Set(CommandType.RequestUserPwd, username);
+
+                    // Check if username exists and get password hash/salt of that username
+                    if (CommandHandler.SendAndHandle(stream, ref buffer, cmdToSend, out Command receivedCmd))
+                    {
+                        pwdSet = PasswordSet.Deserialize(receivedCmd.Payload);
+                        if (pwdSet == null)
+                        {
+                            WriteLine(" Error: Received invalid password");
+                            ReadKey(true);
+                            continue;
+                        }
+                    }
+                    else continue;
+
+                    Write(" Enter password: ");
+                    string pwd = "";
+                    switch(Misc.InputData(ref pwd, "Password", MagicNum.passwordMin, MagicNum.passwordMax, true))
+                    {
+                        case null: return;
+                        case true: break;
+                        case false: continue;
+                    }
+
+                    if (VerifyPassword(pwd, pwdSet))
+                    {
+                        cmdToSend = new(CommandType.Login, username);
+
+                        if (CommandHandler.SendAndHandle(stream, ref buffer, cmdToSend, out receivedCmd))
+                        {
+                            loggedInUser = User.Deserialize(receivedCmd.Payload);
+
+                            if (loggedInUser == null || loggedInUser.UID == -1)
+                            {
+                                WriteLine(" Error: Received invalid user data");
+                                ReadKey(true);
+                                return;
+                            }
+                            else
+                            {
+                                loggedInUser.PwdSet = pwdSet;
+                                IOHelper.WriteBorder();
+                                WriteLine(" Logged in successfully!");
+                                ReadKey(true);
+                                return;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        WriteLine(" Error: Wrong password");
+                        ReadKey(true);
+                        continue;
+                    }
+                }
+            }
+
             public static void Register(NetworkStream stream)
             {
                 byte[] buffer = new byte[MagicNum.bufferSize];
@@ -545,7 +447,7 @@ class Client
                 while(true)
                 {
                     ShowMenu.WelcomeMenu();
-                    WriteLine("1");
+                    WriteLine("2");
                     IOHelper.WriteBorder();
                     WriteLine(" < Press ESC to cancel >");
 
@@ -562,7 +464,7 @@ class Client
 
                     // Check availability of username
                     cmdToSend.Set(CommandType.CheckUsername, username.ToString());
-                    if (!CommandHandler.Stream(stream, ref buffer, cmdToSend, out _))
+                    if (!CommandHandler.SendAndHandle(stream, ref buffer, cmdToSend, out _))
                     {
                         username.Clear();
                         continue;
@@ -615,7 +517,7 @@ class Client
                         };
 
                     cmdToSend.Set(CommandType.Register, User.Serialize(registeredUser));
-                    if (CommandHandler.Stream(stream, ref buffer, cmdToSend, out _))
+                    if (CommandHandler.SendAndHandle(stream, ref buffer, cmdToSend, out _))
                     {
                         IOHelper.WriteBorder();
                         WriteLine(" Registered successfully!");
@@ -623,86 +525,6 @@ class Client
                     }
 
                     return;
-                }
-            }
-
-            public static void Login(NetworkStream stream, out User? loggedInUser)
-            {
-                byte[] buffer = new byte[MagicNum.bufferSize];
-                Command cmdToSend = new();
-                PasswordSet? pwdSet;
-                loggedInUser = null;
-                
-                while(true)
-                {
-                    ShowMenu.WelcomeMenu();
-                    WriteLine("2");
-                    IOHelper.WriteBorder();
-                    WriteLine(" < Press ESC to cancel >");
-
-                    Write(" Enter username: ");
-                    string username = "";
-                    switch(Misc.InputData(ref username, "Username", MagicNum.nicknameMin, MagicNum.nicknameMax, false))
-                    {
-                        case null: return;
-                        case true: break;
-                        case false: continue;
-                    }
-
-                    cmdToSend.Set(CommandType.RequestUserPwd, username);
-
-                    // Check if username exists and get password hash/salt of that username
-                    if (CommandHandler.Stream(stream, ref buffer, cmdToSend, out Command receivedCmd))
-                    {
-                        pwdSet = PasswordSet.Deserialize(receivedCmd.Payload);
-                        if (pwdSet == null)
-                        {
-                            WriteLine(" Error: Received invalid password");
-                            ReadKey(true);
-                            continue;
-                        }
-                    }
-                    else continue;
-
-                    Write(" Enter password: ");
-                    string pwd = "";
-                    switch(Misc.InputData(ref pwd, "Password", MagicNum.passwordMin, MagicNum.passwordMax, true))
-                    {
-                        case null: return;
-                        case true: break;
-                        case false: continue;
-                    }
-
-                    if (VerifyPassword(pwd, pwdSet))
-                    {
-                        cmdToSend = new(CommandType.Login, username);
-
-                        if (CommandHandler.Stream(stream, ref buffer, cmdToSend, out receivedCmd))
-                        {
-                            loggedInUser = User.Deserialize(receivedCmd.Payload);
-
-                            if (loggedInUser == null || loggedInUser.UID == null)
-                            {
-                                WriteLine(" Error: Received invalid user data");
-                                ReadKey(true);
-                                return;
-                            }
-                            else
-                            {
-                                loggedInUser.PwdSet = pwdSet;
-                                IOHelper.WriteBorder();
-                                WriteLine(" Logged in successfully!");
-                                ReadKey(true);
-                                return;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        WriteLine(" Error: Wrong password");
-                        ReadKey(true);
-                        continue;
-                    }
                 }
             }
 
@@ -726,7 +548,7 @@ class Client
                         case false: continue;
                     }
 
-                    if (CommandHandler.Stream(stream, ref buffer, new(CommandType.ChangeNickname, newNickname), out _))
+                    if (CommandHandler.SendAndHandle(stream, ref buffer, new(CommandType.ChangeNickname, newNickname), out _))
                     {
                         user.Nickname = newNickname;
                         IOHelper.WriteBorder();
@@ -812,7 +634,7 @@ class Client
 
                     PasswordSet newPwdSet = HashPassword(newPwd.ToString());
 
-                    if (CommandHandler.Stream(stream, ref buffer, new(CommandType.ChangePassword, PasswordSet.Serialize(newPwdSet)), out _))
+                    if (CommandHandler.SendAndHandle(stream, ref buffer, new(CommandType.ChangePassword, PasswordSet.Serialize(newPwdSet)), out _))
                     {
                         user.PwdSet = newPwdSet;
                         IOHelper.WriteBorder();
@@ -850,7 +672,7 @@ class Client
                         GroupName = groupName
                     };
 
-                    if (CommandHandler.Stream(stream, ref buffer, new(CommandType.CreateGroup, ChatGroup.Serialize(newGroup)), out _))
+                    if (CommandHandler.SendAndHandle(stream, ref buffer, new(CommandType.CreateGroup, ChatGroup.Serialize(newGroup)), out _))
                     {
                         IOHelper.WriteBorder();
                         WriteLine(" Created chat group successfully!");
@@ -896,7 +718,7 @@ class Client
                         continue;
                     }
 
-                    if (CommandHandler.Stream(stream, ref buffer, new(CommandType.DeleteGroup, groupID.ToString()), out _))
+                    if (CommandHandler.SendAndHandle(stream, ref buffer, new(CommandType.DeleteGroup, groupID.ToString()), out _))
                     {
                         IOHelper.WriteBorder();
                         WriteLine(" Deleted chat group successfully!");
@@ -907,7 +729,7 @@ class Client
                 }
             }
 
-            public static void GetGroupInfo(NetworkStream stream, List<ChatGroup> groups, int curPage, out ChatGroup? group)
+            public static void JoinGroupMenu(NetworkStream stream, List<ChatGroup> groups, int curPage, out ChatGroup? group)
             {
                 byte[] buffer = new byte[MagicNum.bufferSize];
                 group = null;
@@ -943,7 +765,7 @@ class Client
                         continue;
                     }
 
-                    if (CommandHandler.Stream(stream, ref buffer, new(CommandType.JoinGroup, groupID.ToString()), out Command receivedCmd))
+                    if (CommandHandler.SendAndHandle(stream, ref buffer, new(CommandType.JoinGroup, groupID.ToString()), out Command receivedCmd))
                     {
                         group = ChatGroup.Deserialize(receivedCmd.Payload);
 
@@ -962,9 +784,48 @@ class Client
             private static readonly StringBuilder inputBuffer = new();
             private static readonly List<Message> msgHistory = [];
 
+            public static bool GetGroupHistory(NetworkStream stream, int groupID)
+            {
+                msgHistory.Clear();
+                byte[] buffer = new byte[MagicNum.bufferSize];
+
+                if (CommandHandler.SendAndHandle(stream, ref buffer, new(CommandType.RequestGroupHistory, groupID.ToString()), out Command receivedCmd))
+                {
+                    List<Message>? messages = JsonSerializer.Deserialize<List<Message>>(receivedCmd.Payload);
+
+                    if (messages != null)
+                    {
+                        msgHistory.AddRange(messages);
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
+            public static void WritePromt(string prompt)
+            {
+                IOHelper.WriteBorder();
+                Write(prompt);
+                Write(inputBuffer);
+            }
+
+            public static void WriteMsgHistory()
+            {
+                Clear();
+                msgHistory.ForEach(msg => WriteLine(msg.ToString()));
+            }
+
+            public static void WriteMessage(string content, string prompt)
+            {
+                IOHelper.MoveCursor(- prompt.Length - inputBuffer.Length - WindowWidth);
+                WriteLine(content.ToString().PadRight(WindowWidth - 1));
+                WritePromt(prompt);
+            }
+
             public static void StartChatting(NetworkStream stream, User mainUser, User? partner, ChatGroup? joinedGroup)
             {
-                if(mainUser.UID == null || (joinedGroup == null && partner == null))
+                if(mainUser.UID == -1 || (joinedGroup == null && partner == null))
                 {
                     WriteLine(" Error: Null chatting data");
                     return;
@@ -974,58 +835,96 @@ class Client
                 WriteLine(" All chat commands:");
                 ShowMenu.ChatCommands();
                 IOHelper.WriteBorder();
-                
-                Command cmdToSend = new();
+
+                if (joinedGroup != null && GetGroupHistory(stream, joinedGroup.GroupID))
+                    WriteLine(" Load group's message history successfully");
+                else
+                    WriteLine(" Failed to load message history");
 
                 WriteLine(" Press any key to continue...");
                 ReadKey(true);
                 Clear();
 
-                string prompt = $"<{mainUser.Nickname}> ";
+                string prompt = $"[{mainUser.Nickname}] > ";
                 string? content;
-                Message message = new((int) mainUser.UID, partner?.UID, joinedGroup?.GroupID, mainUser.Nickname, "");
+                Command cmdToSend = new();
 
                 CancellationTokenSource stopTokenSource = new();
 
                 _ = Task.Run(() => EchoMessage(stream, prompt, stopTokenSource.Token));
+                
+                WriteMsgHistory();
+                WritePromt(prompt);
 
                 while(true)
                 {
-                    Write(prompt);
-
                     inputBuffer.Clear();
-                    content = IOHelper.ReadInput(inputBuffer, null, false);
+                    content = IOHelper.ReadInput(inputBuffer, true, null, false);
 
-                    if(content == null )
+                    if (content == null)
+                    {
+                        stopTokenSource.Cancel();
+                        stopTokenSource.Dispose();
                         return;
-                    if(string.IsNullOrWhiteSpace(content))
+                    }
+                    if (string.IsNullOrWhiteSpace(content))
                         continue;
 
-                    if(content.Trim().ElementAt(0) == '/')
+                    if (content.Trim().ElementAt(0) == '/')
                     {
                         switch(content.Trim())
                         {
+                            case "/help":
+                                IOHelper.MoveCursor(- prompt.Length - inputBuffer.Length - WindowWidth);
+                                WriteLine(new string(' ', WindowWidth - 1));
+                                WriteLine("[System] All chat commands:");
+                                ShowMenu.ChatCommands();
+                                WriteLine();
+                                WritePromt(prompt);
+                                continue;
+
+                            case "/info":
+                                if(joinedGroup != null)
+                                {
+                                    cmdToSend.Set(CommandType.RequestGroupInfo, joinedGroup.GroupID.ToString());
+                                    break;
+                                }
+                                else
+                                {
+                                    continue;
+                                }
+
+                            case "/clear": case "/cls":
+                                Clear();
+                                WritePromt(prompt);
+                                continue;
+
+                            case "/reload":
+                                WriteMsgHistory();
+                                WritePromt(prompt);
+                                continue;
+
                             case "/leave":
+                                stopTokenSource.Cancel();
+                                stopTokenSource.Dispose();
                                 return;
                             
                             default:
-                                WriteLine("[System] Unknown chat command");
+                                WriteMessage("[System] Unknown chat command", prompt);
                                 continue;
                         }
                     }
+                    else
+                    {
+                        Message message = new(mainUser, partner, joinedGroup, content);
+                        cmdToSend.Set(CommandType.Message, Message.Serialize(message));
+                        WriteMessage(message.ToString(), prompt);
+                        lock (msgHistory)
+                            msgHistory.Add(message);
+                    }
 
-                    message.Content = content;
-                    cmdToSend.Set(CommandType.Message, Message.Serialize(message));
                     stream.Write(EncodeString(Command.Serialize(cmdToSend)));
                 }
-            }
-
-            public static void WriteMessage(string content, string prompt)
-            {
-                IOHelper.MoveCursorLeft(prompt.Length + inputBuffer.Length);
-                WriteLine(content.ToString());
-                Write(prompt);
-                Write(inputBuffer);
             }
 
             public static async Task EchoMessage(NetworkStream stream, string prompt, CancellationToken stopToken)
@@ -1033,16 +932,13 @@ class Client
                 byte[] buffer = new byte[MagicNum.bufferSize];
                 int bytesRead, totalRead = 0;
                 Command? receivedCmd;
-                Message? echoMsg;
 
                 try
                 {
-                    while(!stopToken.IsCancellationRequested)
+                    while(true)
                     {
-                        while(true)
+                        while((bytesRead = await stream.ReadAsync(buffer, totalRead, 1024, stopToken)) > 0)
                         {
-                            bytesRead = await stream.ReadAsync(buffer, totalRead, 1024, stopToken);
-
                             totalRead += bytesRead;
                             
                             if(bytesRead < 1024)
@@ -1052,35 +948,48 @@ class Client
                                 Array.Resize(ref buffer, buffer.Length * 2);
                         }
 
+                        if(stopToken.IsCancellationRequested)
+                            return;
+
                         receivedCmd = Command.Deserialize(DecodeBytes(buffer, 0, totalRead));
                         totalRead = 0;
 
                         switch(receivedCmd?.CommandType)
                         {
                             case CommandType.MessageEcho:
-                                echoMsg = Message.Deserialize(receivedCmd.Payload);
+                                Message? echoMsg = Message.Deserialize(receivedCmd.Payload);
 
                                 if (echoMsg == null)
-                                    WriteMessage("Error: Null echo message", prompt);
+                                    WriteMessage("[System] Error: Null echo message", prompt);
                                 else
+                                {
                                     WriteMessage(echoMsg.ToString(), prompt);
+                                    lock(msgHistory)
+                                        msgHistory.Add(echoMsg);
+                                }
+                                continue;
 
+                            case CommandType.RequestGroupInfo:
+                                ChatGroup? requestedGroup = ChatGroup.Deserialize(receivedCmd.Payload);
+                                WriteMessage($"[System] Group info: '{requestedGroup?.ToString(true)}'", prompt);
                                 continue;
 
                             case CommandType.Error:
-                                WriteMessage($" Error: {receivedCmd.Payload}", prompt);
+                                WriteMessage($"[System] Error while echoing: {receivedCmd.Payload}", prompt);
                                 continue;
 
                             default:
-                                WriteMessage(" Error: Received invalid command", prompt);
+                                WriteMessage($"[System] Error while echoing: Received invalid command {receivedCmd?.CommandType}", prompt);
                                 continue;
                         }
                     }
                 }
                 catch(OperationCanceledException) { /* ignored */ }
+                catch(IOException) {}
                 catch(Exception ex)
                 {
-                    WriteLine($" Error while echoing msg: ({ex.GetType().Name}) {ex.Message}");
+                    // WriteLine($" Error while echoing msg: ({ex.GetType().Name}) {ex.Message}");
+                    WriteLine(ex);
                     ReadKey(true);
                 }
             }
@@ -1108,8 +1017,8 @@ class Client
             {
                 Clear();
                 IOHelper.WriteHeader("Zelo");
-                WriteLine(" 1. Register");
-                WriteLine(" 2. Login");
+                WriteLine(" 1. Login");
+                WriteLine(" 2. Register");
                 WriteLine(" 0. Shut down client");
                 IOHelper.WriteBorder();
                 Write(" Enter Choice: ");
@@ -1205,7 +1114,7 @@ class Client
             public static void ChatCommands()
             {
                 WriteLine(" /help         -- Show all chat commands");
-                WriteLine(" /info         -- Show info of chat group/partner");
+                WriteLine(" /info         -- Show info of current chat room");
                 WriteLine(" /clear /cls   -- Clear console");
                 WriteLine(" /reload       -- Clear console then re-write all messages");
                 WriteLine(" /leave        -- Leave chat room");
@@ -1288,9 +1197,8 @@ class Client
             /// Send 'cmdToSend' over provided NetworkStream 'stream'. Automatically output to console if 'receivedCmd' is error type.
             /// </summary>
             /// <returns> True if 'receivedCmd' is same type as 'cmdToSend'; false otherwise. </returns>
-            public static bool Stream(NetworkStream stream, ref byte[] buffer, Command cmdToSend, out Command receivedCmd)
+            public static bool SendAndHandle(NetworkStream stream, ref byte[] buffer, Command cmdToSend, out Command receivedCmd)
             {
-                Command? tempCmd;
                 receivedCmd = new();
 
                 int bytesRead, totalRead = 0;
@@ -1312,20 +1220,28 @@ class Client
                     }
                 }
                 
-                tempCmd = Command.Deserialize(DecodeBytes(buffer, 0, totalRead));
-                switch(tempCmd?.CommandType)
+                Command? tempCmd = Command.Deserialize(DecodeBytes(buffer, 0, totalRead));
+
+                if(tempCmd == null)
+                {
+                    WriteLine(" Error: Received null command");
+                    ReadKey(true);
+                    return false;
+                }
+
+                switch(tempCmd.CommandType)
                 {
                     case var value when value == cmdToSend.CommandType:
-                        receivedCmd = tempCmd!;
+                        receivedCmd = tempCmd;
                         return true;
 
                     case CommandType.Error:
-                        WriteLine($" Error: {receivedCmd.Payload}");
+                        WriteLine($" Error while handling cmd: {tempCmd.Payload}");
                         ReadKey(true);
                         return false;
 
                     default:
-                        WriteLine(" Error: Received invalid command");
+                        WriteLine($" Error while handling cmd: Received invalid command {tempCmd.CommandType}");
                         ReadKey(true);
                         return false;
                 }

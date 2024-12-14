@@ -1,25 +1,27 @@
 class ChatGroupHandler
 {
     private readonly ChatGroup? chatGroup;
-    private readonly List<int>? membersIDs;
+    private readonly List<int>? memberIDs;
     private readonly List<ClientHandler> connectedClients = [];
     private readonly Action<ChatGroupHandler> disposeAction;
 
     public ChatGroup? GetGroup => chatGroup;
-    public List<int>? GetMemIDs => membersIDs;
+    public List<int>? GetMemIDs => memberIDs;
 
     public ChatGroupHandler(ChatGroup _chatGroup, ClientHandler client, Action<ChatGroupHandler> _disposeAction)
     {
-        AddClient(client);
         chatGroup = _chatGroup;
         disposeAction = _disposeAction;
+
+        AddClient(client);
     }
 
-    public ChatGroupHandler(ClientHandler client1, int mainUserID, int partnerID, Action<ChatGroupHandler> _disposeAction)
+    public ChatGroupHandler(ClientHandler client, int mainUserID, int partnerID, Action<ChatGroupHandler> _disposeAction)
     {
-        AddClient(client1);
-        membersIDs = [mainUserID, partnerID];
+        memberIDs = [mainUserID, partnerID];
         disposeAction = _disposeAction;
+
+        AddClient(client);
     }
 
     public async Task EchoMessage(Message message, ClientHandler sourceClient)
@@ -45,6 +47,10 @@ class ChatGroupHandler
                 Task.WhenAny(DbHelper.UpdateChatGroup(chatGroup));
                 LogManager.AddLog($"{client.EndPoint} connected to group '{chatGroup.ToString(false)}'");
             }
+            else if(memberIDs != null)
+            {
+                LogManager.AddLog($"{client.EndPoint} connected to private chat of '{memberIDs}");
+            }
         }
     }
 
@@ -60,11 +66,15 @@ class ChatGroupHandler
                 Task.WhenAny(DbHelper.UpdateChatGroup(chatGroup));
                 LogManager.AddLog($"{client.EndPoint} disconnected from group '{chatGroup.ToString(false)}'");
             }
+            else if(memberIDs != null)
+            {
+                LogManager.AddLog($"{client.EndPoint} disconnected from private chat of '{memberIDs}");
+            }
 
             if(connectedClients.Count == 0)
             {
                 disposeAction(this);
-                LogManager.AddLog($"Handler of group '{chatGroup?.ToString(false) ?? "(private)"}' auto-disposed");
+                LogManager.AddLog($"Handler of group '{chatGroup?.ToString(false) ?? memberIDs!.ToString()}' auto-disposed");
             }
         }
     }

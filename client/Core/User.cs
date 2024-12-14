@@ -3,7 +3,7 @@ using System.Text.Json;
 [Serializable]
 class User
 {
-    public int? UID { get; set; }
+    public int UID { get; set; } = -1;
     public string Username { get; set; } = "";
     public string Nickname { get; set; } = "";
     public PasswordSet? PwdSet { get; set; }

@@ -161,9 +161,12 @@ class Server
     {
         try
         {
-            while(!token.IsCancellationRequested)
+            while(true)
             {
                 TcpClient client = await server.AcceptTcpClientAsync(token);
+
+                if(token.IsCancellationRequested)
+                    return;
 
                 ClientHandler clientHandler = new(client);
 
@@ -202,7 +205,7 @@ class Server
         }
     }
 
-    public static void JoinPublicGroup(ChatGroup groupToJoin, ClientHandler client)
+    public static void JoinChatGroup(ChatGroup groupToJoin, ClientHandler client)
     {
         lock(groupHandlers)
         {
@@ -219,7 +222,7 @@ class Server
         }
     }
 
-    public static void JoinPrivateGroup(ClientHandler client, int mainUserID, int partnerID)
+    public static void JoinPrivate(ClientHandler client, int mainUserID, int partnerID)
     {
         lock(groupHandlers)
         {
@@ -313,9 +316,10 @@ class Server
             IOHelper.WriteBorder();
             
             LogManager.WriteCurrentLog();
+            LogManager.ToggleLogView(true);
 
-            CancellationTokenSource leaveLogViewerToken = new();
-            _ = Task.Run(() => LogManager.WriteNewLogAsync(leaveLogViewerToken.Token));
+            // CancellationTokenSource leaveLogViewerToken = new();
+            // _ = Task.Run(() => LogManager.WriteNewLogAsync(leaveLogViewerToken.Token));
 
             while(true)
             {
@@ -324,12 +328,11 @@ class Server
                 switch(key)
                 {
                     case ConsoleKey.Escape:
-                        leaveLogViewerToken.Cancel();
+                        LogManager.ToggleLogView(false);
                         return false;
 
                     case ConsoleKey.Delete:
                         LogManager.ClearLog();
-                        leaveLogViewerToken.Cancel();
                         return true;
                 }
             }
