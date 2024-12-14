@@ -21,7 +21,7 @@ class ChatGroup
         => $"[ID: {GroupID:D3}] {GroupName} ({OnlineCount} connected)";
 
     public string ToString(bool showOnline)
-        => showOnline ? ToString() : $"$[ID: {GroupID:D3}] {GroupName}";
+        => showOnline ? ToString() : $"[ID: {GroupID:D3}] {GroupName}";
 
     public static string Serialize(ChatGroup group) =>
         JsonSerializer.Serialize(group);

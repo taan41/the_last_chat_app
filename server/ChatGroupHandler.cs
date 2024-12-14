@@ -1,32 +1,34 @@
 class ChatGroupHandler
 {
     private readonly ChatGroup? chatGroup;
+    private readonly List<int>? membersIDs;
     private readonly List<ClientHandler> connectedClients = [];
-    private readonly bool privateChat = false;
     private readonly Action<ChatGroupHandler> disposeAction;
 
     public ChatGroup? GetGroup => chatGroup;
-    public bool PrivateChat => privateChat;
+    public List<int>? GetMemIDs => membersIDs;
 
     public ChatGroupHandler(ChatGroup _chatGroup, ClientHandler client, Action<ChatGroupHandler> _disposeAction)
     {
-        chatGroup = _chatGroup;
         AddClient(client);
+        chatGroup = _chatGroup;
         disposeAction = _disposeAction;
     }
 
-    public ChatGroupHandler(bool _privateChat, ClientHandler client1, Action<ChatGroupHandler> _disposeAction)
+    public ChatGroupHandler(ClientHandler client1, int mainUserID, int partnerID, Action<ChatGroupHandler> _disposeAction)
     {
         AddClient(client1);
-        privateChat = _privateChat;
+        membersIDs = [mainUserID, partnerID];
         disposeAction = _disposeAction;
     }
 
-    public void EchoMessage(Message message)
+    public async Task EchoMessage(Message message, ClientHandler sourceClient)
     {
-        lock(connectedClients)
-            foreach (ClientHandler client in connectedClients)
-                _ = Task.Run(() => client.EchoMessage(message));
+        await DbHelper.SaveGroupMessage(message);
+
+        foreach (ClientHandler client in connectedClients)
+            if(client != sourceClient)
+                await client.EchoMessage(message);
     }
 
     public void AddClient(ClientHandler client)
@@ -41,6 +43,7 @@ class ChatGroupHandler
             {
                 chatGroup.OnlineCount = connectedClients.Count;
                 Task.WhenAny(DbHelper.UpdateChatGroup(chatGroup));
+                LogManager.AddLog($"{client.EndPoint} connected to group '{chatGroup.ToString(false)}'");
             }
         }
     }
@@ -55,10 +58,14 @@ class ChatGroupHandler
             {
                 chatGroup.OnlineCount = connectedClients.Count;
                 Task.WhenAny(DbHelper.UpdateChatGroup(chatGroup));
+                LogManager.AddLog($"{client.EndPoint} disconnected from group '{chatGroup.ToString(false)}'");
             }
 
             if(connectedClients.Count == 0)
+            {
                 disposeAction(this);
+                LogManager.AddLog($"Handler of group '{chatGroup?.ToString(false) ?? "(private)"}' auto-disposed");
+            }
         }
     }
 }

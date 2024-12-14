@@ -1,3 +1,5 @@
+using System.Diagnostics.Contracts;
+using System.Linq.Expressions;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -32,21 +34,30 @@ class Client
                 stream.ReadTimeout = MagicNum.streamTimeOut;
                 stream.WriteTimeout = MagicNum.streamTimeOut;
 
-                WriteLine(" Connected to server successfully.");
+                WriteLine(" Connected to server successfully!");
                 ReadKey(true);
 
                 while(true)
                 {
                     WelcomeMenu(stream, out User? loggedInUser, out stopProgram);
-                    if (stopProgram || loggedInUser == null)
+
+                    if (stopProgram)
                         return;
+                    if(loggedInUser == null)
+                        throw new ArgumentNullException("Null user");
 
                     UserMenu(stream, loggedInUser);
                 }
             }
+            catch(IOException)
+            {
+                WriteLine(" Error: Server is offline");
+                ReadKey(true);
+            }
             catch(Exception ex)
             {
-                WriteLine($" Error: ({ex.GetType().Name}) {ex.Message}");
+                // WriteLine($" Error: ({ex.GetType().Name}) {ex.Message}");
+                WriteLine(ex);
                 ReadKey(true);
             }
         }
@@ -75,7 +86,7 @@ class Client
                     else
                     {
                         serverIP = defaultIP;
-                        WriteLine(" Invalid IP.");
+                        WriteLine(" Error: Invalid IP");
                         ReadKey(true);
                     }
                     continue;
@@ -92,7 +103,7 @@ class Client
                     catch(FormatException)
                     {
                         port = defaultPort;
-                        WriteLine(" Invalid port");
+                        WriteLine(" Error: Invalid port");
                         ReadKey(true);
                     }
                     continue;
@@ -207,8 +218,8 @@ class Client
     static void JoinGroupMenu(NetworkStream stream, User loggedInUser)
     {
         byte[] buffer = new byte[MagicNum.bufferSize];
-        Command cmdToSend = new();
         List<ChatGroup>? groups;
+        Command cmdToSend = new();
 
         int curPage = 0, maxPage;
         while (true)
@@ -226,41 +237,41 @@ class Client
                     ReadKey(true);
                     return;
                 }
+
+                maxPage = groups.Count / 10;
             }
             else return;
 
             Helper.ShowMenu.JoinGroupMenu(groups, curPage);
-
-            maxPage = groups.Count / 10;
             switch (IOHelper.ReadInput(false))
             {
                 case "1":
-                    Helper.ClientAction.JoinChatGroup(stream, groups, curPage, out ChatGroup? joinedGroup);
+                    Helper.ClientAction.GetGroupInfo(stream, groups, curPage, out ChatGroup? joinedGroup);
 
                     if(joinedGroup != null)
                     {
-                        // Start receive msg
+                        Helper.ClientAction.StartChatting(stream, loggedInUser, null, joinedGroup);
                     }
 
                     cmdToSend.Set(CommandType.LeaveGroup, null);
                     Helper.CommandHandler.Stream(stream, ref buffer, cmdToSend, out _);
-                    break;
+                    continue;
 
                 case "8":
                     if (curPage > 0)
                         curPage--;
-                    break;
+                    continue;
 
                 case "9":
                     if (curPage < maxPage)
                         curPage++;
-                    break;
+                    continue;
 
                 case "0": case null:
                     return;
 
                 default:
-                    break;
+                    continue;
             }
         }
     }
@@ -268,10 +279,11 @@ class Client
     static void ManageGroupMenu(NetworkStream stream, User loggedInUser)
     {
         byte[] buffer = new byte[MagicNum.bufferSize];
-        Command cmdToSend = new(CommandType.RequestCreatedGroups, loggedInUser.UID.ToString());
         List<ChatGroup>? groups;
 
         // Get list of groups created by currently logged-in user
+        Command cmdToSend = new(CommandType.RequestCreatedGroups, loggedInUser.UID.ToString());
+
         if (Helper.CommandHandler.Stream(stream, ref buffer, cmdToSend, out Command receivedCmd))
         {
             groups = JsonSerializer.Deserialize<List<ChatGroup>>(receivedCmd.Payload);
@@ -285,12 +297,11 @@ class Client
         }
         else return;
 
-        int curPage = 0, maxPage;
+        int curPage = 0, maxPage = groups.Count / 10;
         while (true)
         {
             Helper.ShowMenu.ManageGroupMenu(groups, curPage);
 
-            maxPage = groups.Count / 10;
             switch (IOHelper.ReadInput(false))
             {
                 case "1":
@@ -318,7 +329,9 @@ class Client
                     continue;
             }
 
+            // Refresh list after creating/deleting
             cmdToSend.Set(CommandType.RequestCreatedGroups, loggedInUser.UID.ToString());
+
             if (Helper.CommandHandler.Stream(stream, ref buffer, cmdToSend, out receivedCmd))
             {
                 groups = JsonSerializer.Deserialize<List<ChatGroup>>(receivedCmd.Payload);
@@ -329,9 +342,16 @@ class Client
                     ReadKey(true);
                     return;
                 }
+
+                maxPage = groups.Count / 10;
             }
             else return;
         }
+    }
+
+    static void Chatting(User user, User? partner, ChatGroup? group)
+    {
+
     }
 
     /*
@@ -710,7 +730,7 @@ class Client
                     {
                         user.Nickname = newNickname;
                         IOHelper.WriteBorder();
-                        WriteLine(" Changed nickname successfully");
+                        WriteLine(" Changed nickname successfully!");
                         ReadKey(true);
                         return;
                     }
@@ -887,7 +907,7 @@ class Client
                 }
             }
 
-            public static void JoinChatGroup(NetworkStream stream, List<ChatGroup> groups, int curPage, out ChatGroup? group)
+            public static void GetGroupInfo(NetworkStream stream, List<ChatGroup> groups, int curPage, out ChatGroup? group)
             {
                 byte[] buffer = new byte[MagicNum.bufferSize];
                 group = null;
@@ -939,14 +959,130 @@ class Client
                 }
             }
 
-            public static void StartChatGroup(NetworkStream stream, ChatGroup joinedGroup)
+            private static readonly StringBuilder inputBuffer = new();
+            private static readonly List<Message> msgHistory = [];
+
+            public static void StartChatting(NetworkStream stream, User mainUser, User? partner, ChatGroup? joinedGroup)
             {
+                if(mainUser.UID == null || (joinedGroup == null && partner == null))
+                {
+                    WriteLine(" Error: Null chatting data");
+                    return;
+                }
                 Clear();
                 IOHelper.WriteHeader("Zelo");
                 WriteLine(" All chat commands:");
                 ShowMenu.ChatCommands();
                 IOHelper.WriteBorder();
+                
+                Command cmdToSend = new();
+
                 WriteLine(" Press any key to continue...");
+                ReadKey(true);
+                Clear();
+
+                string prompt = $"<{mainUser.Nickname}> ";
+                string? content;
+                Message message = new((int) mainUser.UID, partner?.UID, joinedGroup?.GroupID, mainUser.Nickname, "");
+
+                CancellationTokenSource stopTokenSource = new();
+
+                _ = Task.Run(() => EchoMessage(stream, prompt, stopTokenSource.Token));
+
+                while(true)
+                {
+                    Write(prompt);
+
+                    inputBuffer.Clear();
+                    content = IOHelper.ReadInput(inputBuffer, null, false);
+
+                    if(content == null )
+                        return;
+                    if(string.IsNullOrWhiteSpace(content))
+                        continue;
+
+                    if(content.Trim().ElementAt(0) == '/')
+                    {
+                        switch(content.Trim())
+                        {
+                            case "/leave":
+                                return;
+                            
+                            default:
+                                WriteLine("[System] Unknown chat command");
+                                continue;
+                        }
+                    }
+
+                    message.Content = content;
+                    cmdToSend.Set(CommandType.Message, Message.Serialize(message));
+                    stream.Write(EncodeString(Command.Serialize(cmdToSend)));
+                }
+            }
+
+            public static void WriteMessage(string content, string prompt)
+            {
+                IOHelper.MoveCursorLeft(prompt.Length + inputBuffer.Length);
+                WriteLine(content.ToString());
+                Write(prompt);
+                Write(inputBuffer);
+            }
+
+            public static async Task EchoMessage(NetworkStream stream, string prompt, CancellationToken stopToken)
+            {
+                byte[] buffer = new byte[MagicNum.bufferSize];
+                int bytesRead, totalRead = 0;
+                Command? receivedCmd;
+                Message? echoMsg;
+
+                try
+                {
+                    while(!stopToken.IsCancellationRequested)
+                    {
+                        while(true)
+                        {
+                            bytesRead = await stream.ReadAsync(buffer, totalRead, 1024, stopToken);
+
+                            totalRead += bytesRead;
+                            
+                            if(bytesRead < 1024)
+                                break;
+
+                            if(totalRead + 1024 >= buffer.Length)
+                                Array.Resize(ref buffer, buffer.Length * 2);
+                        }
+
+                        receivedCmd = Command.Deserialize(DecodeBytes(buffer, 0, totalRead));
+                        totalRead = 0;
+
+                        switch(receivedCmd?.CommandType)
+                        {
+                            case CommandType.MessageEcho:
+                                echoMsg = Message.Deserialize(receivedCmd.Payload);
+
+                                if (echoMsg == null)
+                                    WriteMessage("Error: Null echo message", prompt);
+                                else
+                                    WriteMessage(echoMsg.ToString(), prompt);
+
+                                continue;
+
+                            case CommandType.Error:
+                                WriteMessage($" Error: {receivedCmd.Payload}", prompt);
+                                continue;
+
+                            default:
+                                WriteMessage(" Error: Received invalid command", prompt);
+                                continue;
+                        }
+                    }
+                }
+                catch(OperationCanceledException) { /* ignored */ }
+                catch(Exception ex)
+                {
+                    WriteLine($" Error while echoing msg: ({ex.GetType().Name}) {ex.Message}");
+                    ReadKey(true);
+                }
             }
 
         }

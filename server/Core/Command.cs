@@ -6,10 +6,10 @@ enum CommandType
     CheckUsername, Register,
     RequestUserPwd, Login, Logout,
     ChangeNickname, ChangePassword,
-    RequestUserList, UserAsPartner, DeletePartner,
+    RequestUserList, UserAsPartner, GetPartnerHistory, DeletePartner,
     RequestCreatedGroups, CreateGroup, DeleteGroup,
-    RequestGroupList, JoinGroup, LeaveGroup,
-    Message, RefreshGroupInfo,
+    RequestGroupList, JoinGroup, GetGroupHistory, LeaveGroup,
+    Message, MessageEcho, RefreshGroupInfo,
     Disconnect
 }
 

@@ -80,8 +80,10 @@ static class IOHelper
     /// <param name="intercept"> Whether to hide input as '*'. </param>
     /// <returns> A string representing user's input when ENTER key is pressed, null when ESC key is pressed. </returns>
     public static string? ReadInput(int? limit, bool intercept)
+        => ReadInput(new(), limit, intercept);
+
+    public static string? ReadInput(StringBuilder sb, int? limit, bool intercept)
     {
-        StringBuilder sb = new();
         bool done = false;
         int index = 0, startCursorLeft = CursorLeft;
 
@@ -93,7 +95,7 @@ static class IOHelper
             {
                 case ConsoleKey.Enter:
                     done = true;
-                    break;
+                    continue;
 
                 case ConsoleKey.Escape:
                     WriteLine();
@@ -159,8 +161,11 @@ static class IOHelper
         }
 
         MoveCursorLeft(-index);
-        WriteLine(intercept ? new string('*', sb.Length) : sb.ToString());
-        return sb.ToString();
+        string result = sb.ToString();
+        sb.Clear();
+
+        WriteLine(intercept ? new string('*', result.Length) : result);
+        return result;
     }
 
     private static void HandleBackspace(StringBuilder sb, ref int index, ConsoleModifiers modifiers)

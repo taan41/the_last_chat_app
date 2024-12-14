@@ -202,20 +202,37 @@ class Server
         }
     }
 
-    public static void JoinChatGroup(ChatGroup groupToJoin, ClientHandler client)
+    public static void JoinPublicGroup(ChatGroup groupToJoin, ClientHandler client)
     {
         lock(groupHandlers)
         {
-            foreach(ChatGroupHandler group in groupHandlers)
+            foreach(ChatGroupHandler handler in groupHandlers)
             {
-                if(group.GetGroup != null && group.GetGroup.GroupID == groupToJoin.GroupID)
+                if(handler.GetGroup != null && handler.GetGroup.GroupID == groupToJoin.GroupID)
                 {
-                    group.AddClient(client);
+                    handler.AddClient(client);
                     return;
                 }
             }
 
             groupHandlers.Add(new(groupToJoin, client, DisposeChatGroup));
+        }
+    }
+
+    public static void JoinPrivateGroup(ClientHandler client, int mainUserID, int partnerID)
+    {
+        lock(groupHandlers)
+        {
+            foreach(ChatGroupHandler handler in groupHandlers)
+            {
+                if(handler.GetMemIDs != null && handler.GetMemIDs.Contains(mainUserID) && handler.GetMemIDs.Contains(partnerID))
+                {
+                    handler.AddClient(client);
+                    return;
+                }
+            }
+
+            groupHandlers.Add(new(client, mainUserID, partnerID, DisposeChatGroup));
         }
     }
 

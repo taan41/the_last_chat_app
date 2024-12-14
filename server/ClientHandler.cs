@@ -11,6 +11,8 @@ class ClientHandler
     readonly object handlerLock = new();
     ChatGroupHandler? groupHandler;
 
+    public EndPoint EndPoint => endPoint;
+
     bool loggedIn = false;
     int uid;
     string? nickname;
@@ -27,7 +29,6 @@ class ClientHandler
 
     public async Task HandlingClientAsync(CancellationToken token)
     {
-
         try
         {
             byte[] buffer = new byte[MagicNumbers.bufferSize];
@@ -36,6 +37,7 @@ class ClientHandler
 
             Command? receivedCmd;
             Command cmdToSend = new();
+
             User? user = null, partner = null, tempUser = null;
 
             while((bytesRead = await stream.ReadAsync(memory, token)) > 0)
@@ -104,13 +106,10 @@ class ClientHandler
                         break;
 
                     case CommandType.Message:
-                        cmdToSend = ProcessMessage(receivedCmd);
+                        cmdToSend = await ProcessMessage(receivedCmd);
                         break;
-                        
 
                     case CommandType.Disconnect:
-                        stream.Close();
-                        client.Close();
                         LogManager.AddLog($"Client disconnected: {endPoint}");
                         return;
 
@@ -121,16 +120,24 @@ class ClientHandler
                 }
 
                 if (cmdToSend.CommandType != CommandType.Empty)
+                {
                     await stream.WriteAsync(EncodeString(Command.Serialize(cmdToSend)), token);
+                    cmdToSend.Set(CommandType.Empty, null);
+                }
             }
         }
-        catch(OperationCanceledException) {}
+        catch(OperationCanceledException)
+        {
+            LogManager.AddLog($"Forced disconnect: {endPoint}");
+        }
         catch(Exception ex)
         {
-            LogManager.AddLog($"Error while handling client: {ex.Message}");
+            LogManager.AddLog($"Error from {endPoint} while handling client: {ex.Message}");
+        }
+        finally
+        {
             stream.Close();
             client.Close();
-            return;
         }
     }
 
@@ -144,7 +151,7 @@ class ClientHandler
 
     public async Task EchoMessage(Message message)
     {
-        await stream.WriteAsync(EncodeString(Command.Serialize(new(CommandType.Message, Message.Serialize(message)))));
+        await stream.WriteAsync(EncodeString(Command.Serialize(new(CommandType.MessageEcho, Message.Serialize(message)))));
     }
 
     private async Task<Command> CheckUsername(Command receivedCmd)
@@ -388,17 +395,19 @@ class ClientHandler
 
         (ChatGroup? groupToJoin, string errorMessage) = await DbHelper.GetChatGroup(groupID);
 
-        if(groupToJoin != null)
+        if (groupToJoin != null)
         {
             cmdToSend.Set(receivedCmd.CommandType, ChatGroup.Serialize(groupToJoin));
 
             // Logic here
-            Server.JoinChatGroup(groupToJoin, this);
+            Server.JoinPublicGroup(groupToJoin, this);
 
             return cmdToSend;
         }
-        else 
+        else
+        {
             Helper.DBErrorHandler(errorMessage, endPoint, "join chat group", ref cmdToSend);
+        }
 
         return cmdToSend;
     }
@@ -416,7 +425,7 @@ class ClientHandler
         return cmdToSend;
     }
 
-    private Command ProcessMessage(Command receivedCmd)
+    private async Task<Command> ProcessMessage(Command receivedCmd)
     {
         Command cmdToSend = new();
         
@@ -431,8 +440,7 @@ class ClientHandler
                 return cmdToSend;
             }
 
-            lock(handlerLock)
-                groupHandler.EchoMessage(receivedMsg);
+            await groupHandler.EchoMessage(receivedMsg, this);
         }
         else
         {
@@ -446,6 +454,9 @@ class ClientHandler
 
     private class Helper
     {
+        /// <summary>
+        /// Set error command & log error based on 'errorMessage'
+        /// </summary>
         public static void DBErrorHandler(string errorMessage, EndPoint endPoint, string action, ref Command cmdToSend)
         {
             if(errorMessage.Length > 0)
