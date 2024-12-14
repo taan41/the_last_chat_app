@@ -7,8 +7,8 @@ class Server
 {
     const int defaultPort = 5000;
 
-    static readonly List<ClientHandler> connectedClients = [];
-    static readonly List<ChatGroupHandler> chatGroups = [];
+    static readonly List<ClientHandler> clientHanlders = [];
+    static readonly List<ChatGroupHandler> groupHandlers = [];
     static TcpListener? server;
 
     public static void Main()
@@ -167,8 +167,8 @@ class Server
 
                 ClientHandler clientHandler = new(client);
 
-                lock(connectedClients)
-                    connectedClients.Add(clientHandler);
+                lock(clientHanlders)
+                    clientHanlders.Add(clientHandler);
 
                 _ = Task.Run(() => clientHandler.HandlingClientAsync(token), token);
             }
@@ -199,6 +199,31 @@ class Server
 
                 default: continue;
             }
+        }
+    }
+
+    public static void JoinChatGroup(ChatGroup groupToJoin, ClientHandler client)
+    {
+        lock(groupHandlers)
+        {
+            foreach(ChatGroupHandler group in groupHandlers)
+            {
+                if(group.GetGroup != null && group.GetGroup.GroupID == groupToJoin.GroupID)
+                {
+                    group.AddClient(client);
+                    return;
+                }
+            }
+
+            groupHandlers.Add(new(groupToJoin, client, DisposeChatGroup));
+        }
+    }
+
+    public static void DisposeChatGroup(ChatGroupHandler groupHandler)
+    {
+        lock(groupHandlers)
+        {
+            groupHandlers.Remove(groupHandler);
         }
     }
 

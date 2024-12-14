@@ -7,9 +7,10 @@ using static Utilities;
 
 class Client
 {
-    // const string defaultIP = "26.244.97.115";
-    // const string defaultIP = "192.168.0.105";
-    const string defaultIP = "127.0.0.1";
+    const string defaultIP =
+        "127.0.0.1";        // localhost IP
+        // "192.168.0.105"; // wifi (?) IP
+        // "26.244.97.115"; // tan Radmin IP
     const int defaultPort = 5000;
 
     public static void Main()
@@ -28,8 +29,8 @@ class Client
 
                 using TcpClient client = new(serverIP, port);
                 using NetworkStream stream = client.GetStream();
-                stream.ReadTimeout = MagicNumbers.streamTimeOut;
-                stream.WriteTimeout = MagicNumbers.streamTimeOut;
+                stream.ReadTimeout = MagicNum.streamTimeOut;
+                stream.WriteTimeout = MagicNum.streamTimeOut;
 
                 WriteLine(" Connected to server successfully.");
                 ReadKey(true);
@@ -141,7 +142,7 @@ class Client
 
     static void UserMenu(NetworkStream stream, User loggedInUser)
     {
-        byte[] buffer = new byte[MagicNumbers.bufferSize];
+        byte[] buffer = new byte[MagicNum.bufferSize];
         Command cmdToSend = new();
 
         while (true)
@@ -156,6 +157,10 @@ class Client
 
                 case "2":
                     Helper.ClientAction.ChangePassword(stream, ref loggedInUser);
+                    continue;
+
+                case "3":
+                    // PrivateMsgMenu(stream, ref loggedInUser);
                     continue;
 
                 case "4":
@@ -183,11 +188,11 @@ class Client
             switch (IOHelper.ReadInput(false))
             {
                 case "1":
-                    JoinGroupMenu(stream, ref loggedInUser);
+                    JoinGroupMenu(stream, loggedInUser);
                     continue;
 
                 case "2":
-                    ManageGroupMenu(stream, ref loggedInUser);
+                    ManageGroupMenu(stream, loggedInUser);
                     continue;
 
                 case "0": case null:
@@ -199,61 +204,74 @@ class Client
         }
     }
 
-    static void JoinGroupMenu(NetworkStream stream, ref User loggedInUser)
+    static void JoinGroupMenu(NetworkStream stream, User loggedInUser)
     {
-        byte[] buffer = new byte[MagicNumbers.bufferSize];
-        Command cmdToSend = new(CommandType.RequestGroupList, null);
+        byte[] buffer = new byte[MagicNum.bufferSize];
+        Command cmdToSend = new();
         List<ChatGroup>? groups;
 
-        if (Helper.CommandHandler.Stream(stream, ref buffer, cmdToSend, out Command receivedCmd))
-        {
-            groups = JsonSerializer.Deserialize<List<ChatGroup>>(receivedCmd.Payload);
-
-            if (groups == null)
-            {
-                WriteLine(" Error: Received null list");
-                ReadKey(true);
-                return;
-            }
-        }
-        else
-            return;
-
-        int curPage = 0, maxPage = groups.Count / 10;
+        int curPage = 0, maxPage;
         while (true)
         {
+            // Get list of all available groups
+            cmdToSend.Set(CommandType.RequestGroupList, null);
+
+            if (Helper.CommandHandler.Stream(stream, ref buffer, cmdToSend, out Command receivedCmd))
+            {
+                groups = JsonSerializer.Deserialize<List<ChatGroup>>(receivedCmd.Payload);
+
+                if (groups == null)
+                {
+                    WriteLine(" Error: Received null list");
+                    ReadKey(true);
+                    return;
+                }
+            }
+            else return;
+
             Helper.ShowMenu.JoinGroupMenu(groups, curPage);
 
+            maxPage = groups.Count / 10;
             switch (IOHelper.ReadInput(false))
             {
                 case "1":
-                    continue;
+                    Helper.ClientAction.JoinChatGroup(stream, groups, curPage, out ChatGroup? joinedGroup);
+
+                    if(joinedGroup != null)
+                    {
+                        // Start receive msg
+                    }
+
+                    cmdToSend.Set(CommandType.LeaveGroup, null);
+                    Helper.CommandHandler.Stream(stream, ref buffer, cmdToSend, out _);
+                    break;
 
                 case "8":
                     if (curPage > 0)
                         curPage--;
-                    continue;
+                    break;
 
                 case "9":
                     if (curPage < maxPage)
                         curPage++;
-                    continue;
+                    break;
 
                 case "0": case null:
                     return;
 
                 default:
-                    continue;
+                    break;
             }
         }
     }
 
-    static void ManageGroupMenu(NetworkStream stream, ref User loggedInUser)
+    static void ManageGroupMenu(NetworkStream stream, User loggedInUser)
     {
-        byte[] buffer = new byte[MagicNumbers.bufferSize];
+        byte[] buffer = new byte[MagicNum.bufferSize];
         Command cmdToSend = new(CommandType.RequestCreatedGroups, loggedInUser.UID.ToString());
         List<ChatGroup>? groups;
 
+        // Get list of groups created by currently logged-in user
         if (Helper.CommandHandler.Stream(stream, ref buffer, cmdToSend, out Command receivedCmd))
         {
             groups = JsonSerializer.Deserialize<List<ChatGroup>>(receivedCmd.Payload);
@@ -267,15 +285,20 @@ class Client
         }
         else return;
 
-        int curPage = 0, maxPage = groups.Count / 10;
+        int curPage = 0, maxPage;
         while (true)
         {
             Helper.ShowMenu.ManageGroupMenu(groups, curPage);
 
+            maxPage = groups.Count / 10;
             switch (IOHelper.ReadInput(false))
             {
                 case "1":
-                    Helper.ClientAction.CreateChatGroup(stream, loggedInUser, groups, curPage);
+                    Helper.ClientAction.CreateChatGroup(stream, (int) loggedInUser.UID!, groups, curPage);
+                    break;
+
+                case "2":
+                    Helper.ClientAction.DeleteChatGroup(stream, groups, curPage);
                     break;
 
                 case "8":
@@ -307,6 +330,7 @@ class Client
                     return;
                 }
             }
+            else return;
         }
     }
 
@@ -494,7 +518,7 @@ class Client
         {
             public static void Register(NetworkStream stream)
             {
-                byte[] buffer = new byte[MagicNumbers.bufferSize];
+                byte[] buffer = new byte[MagicNum.bufferSize];
                 StringBuilder username = new(), pwd = new(), confirmPwd = new(), nickname = new();
                 Command cmdToSend = new();
 
@@ -509,7 +533,7 @@ class Client
                     if (username.Length > 0)
                         WriteLine(username);
                     else
-                        switch(Misc.InputData(ref username, "Username", MagicNumbers.usernameMin, MagicNumbers.usernameMax, false))
+                        switch(Misc.InputData(ref username, "Username", MagicNum.usernameMin, MagicNum.usernameMax, false))
                         {
                             case null: return;
                             case true: break;
@@ -528,7 +552,7 @@ class Client
                     if (pwd.Length > 0)
                         WriteLine(new string('*', pwd.Length));
                     else
-                        switch(Misc.InputData(ref pwd, "Password", MagicNumbers.passwordMin, MagicNumbers.passwordMax, true))
+                        switch(Misc.InputData(ref pwd, "Password", MagicNum.passwordMin, MagicNum.passwordMax, true))
                         {
                             case null: return;
                             case true: break;
@@ -539,7 +563,7 @@ class Client
                     if (confirmPwd.Length > 0)
                         WriteLine(new string('*', confirmPwd.Length));
                     else
-                    switch(Misc.InputData(ref confirmPwd, "Password", MagicNumbers.passwordMin, MagicNumbers.passwordMax, true))
+                    switch(Misc.InputData(ref confirmPwd, "Password", MagicNum.passwordMin, MagicNum.passwordMax, true))
                     {
                         case null: return;
                         case true: break;
@@ -556,7 +580,7 @@ class Client
                     }
 
                     Write(" Enter nickname   : ");
-                    switch(Misc.InputData(ref nickname, "Nickname", MagicNumbers.nicknameMin, MagicNumbers.nicknameMax, false))
+                    switch(Misc.InputData(ref nickname, "Nickname", MagicNum.nicknameMin, MagicNum.nicknameMax, false))
                     {
                         case null: return;
                         case true: break;
@@ -584,7 +608,7 @@ class Client
 
             public static void Login(NetworkStream stream, out User? loggedInUser)
             {
-                byte[] buffer = new byte[MagicNumbers.bufferSize];
+                byte[] buffer = new byte[MagicNum.bufferSize];
                 Command cmdToSend = new();
                 PasswordSet? pwdSet;
                 loggedInUser = null;
@@ -598,7 +622,7 @@ class Client
 
                     Write(" Enter username: ");
                     string username = "";
-                    switch(Misc.InputData(ref username, "Username", MagicNumbers.nicknameMin, MagicNumbers.nicknameMax, false))
+                    switch(Misc.InputData(ref username, "Username", MagicNum.nicknameMin, MagicNum.nicknameMax, false))
                     {
                         case null: return;
                         case true: break;
@@ -622,7 +646,7 @@ class Client
 
                     Write(" Enter password: ");
                     string pwd = "";
-                    switch(Misc.InputData(ref pwd, "Password", MagicNumbers.passwordMin, MagicNumbers.passwordMax, true))
+                    switch(Misc.InputData(ref pwd, "Password", MagicNum.passwordMin, MagicNum.passwordMax, true))
                     {
                         case null: return;
                         case true: break;
@@ -637,7 +661,7 @@ class Client
                         {
                             loggedInUser = User.Deserialize(receivedCmd.Payload);
 
-                            if (loggedInUser == null)
+                            if (loggedInUser == null || loggedInUser.UID == null)
                             {
                                 WriteLine(" Error: Received invalid user data");
                                 ReadKey(true);
@@ -664,7 +688,7 @@ class Client
 
             public static void ChangeNickname(NetworkStream stream, ref User user)
             {
-                byte[] buffer = new byte[MagicNumbers.bufferSize];
+                byte[] buffer = new byte[MagicNum.bufferSize];
 
                 while(true)
                 {
@@ -675,7 +699,7 @@ class Client
 
                     Write(" Enter new nickname: ");
                     string newNickname = "";
-                    switch(Misc.InputData(ref newNickname, "Nickname", MagicNumbers.nicknameMin, MagicNumbers.nicknameMax, false))
+                    switch(Misc.InputData(ref newNickname, "Nickname", MagicNum.nicknameMin, MagicNum.nicknameMax, false))
                     {
                         case null: return;
                         case true: break;
@@ -702,7 +726,7 @@ class Client
                     return;
                 }
 
-                byte[] buffer = new byte[MagicNumbers.bufferSize];
+                byte[] buffer = new byte[MagicNum.bufferSize];
                 StringBuilder oldPwd = new(), newPwd = new(), confirmPwd = new();
 
                 while(true)
@@ -716,7 +740,7 @@ class Client
                     if (oldPwd.Length > 0)
                         WriteLine(new string('*', oldPwd.Length));
                     else
-                        switch(Misc.InputData(ref oldPwd, "Password", MagicNumbers.passwordMin, MagicNumbers.passwordMax, true))
+                        switch(Misc.InputData(ref oldPwd, "Password", MagicNum.passwordMin, MagicNum.passwordMax, true))
                         {
                             case null: return;
                             case true: break;
@@ -735,7 +759,7 @@ class Client
                     if (newPwd.Length > 0)
                         WriteLine(new string('*', newPwd.Length));
                     else
-                        switch(Misc.InputData(ref newPwd, "Password", MagicNumbers.nicknameMin, MagicNumbers.nicknameMax, true))
+                        switch(Misc.InputData(ref newPwd, "Password", MagicNum.passwordMin, MagicNum.passwordMax, true))
                         {
                             case null: return;
                             case true: break;
@@ -751,7 +775,7 @@ class Client
                     }
 
                     Write(" Confirm new password : ");
-                    switch(Misc.InputData(ref confirmPwd, "Password", MagicNumbers.nicknameMin, MagicNumbers.nicknameMax, true))
+                    switch(Misc.InputData(ref confirmPwd, "Password", MagicNum.passwordMin, MagicNum.passwordMax, true))
                     {
                         case null: return;
                         case true: break;
@@ -780,9 +804,9 @@ class Client
                 }
             }
 
-            public static void CreateChatGroup(NetworkStream stream, User creator, List<ChatGroup> groups, int curPage)
+            public static void CreateChatGroup(NetworkStream stream, int creatorID, List<ChatGroup> groups, int curPage)
             {
-                byte[] buffer = new byte[MagicNumbers.bufferSize];
+                byte[] buffer = new byte[MagicNum.bufferSize];
 
                 while(true)
                 {
@@ -793,7 +817,7 @@ class Client
 
                     Write(" Enter chat group name: ");
                     string groupName = "";
-                    switch(Misc.InputData(ref groupName, "Nickname", MagicNumbers.nicknameMin, MagicNumbers.nicknameMax, false))
+                    switch(Misc.InputData(ref groupName, "Chat group name", MagicNum.groupnameMin, MagicNum.groupNameMax, false))
                     {
                         case null: return;
                         case true: break;
@@ -802,13 +826,12 @@ class Client
 
                     ChatGroup newGroup = new()
                     {
-                        CreatorID = creator.UID,
+                        CreatorID = creatorID,
                         GroupName = groupName
                     };
 
                     if (CommandHandler.Stream(stream, ref buffer, new(CommandType.CreateGroup, ChatGroup.Serialize(newGroup)), out _))
                     {
-                        creator.Nickname = groupName;
                         IOHelper.WriteBorder();
                         WriteLine(" Created chat group successfully!");
                         ReadKey(true);
@@ -817,6 +840,115 @@ class Client
                     return;
                 }
             }
+
+            public static void DeleteChatGroup(NetworkStream stream, List<ChatGroup> groups, int curPage)
+            {
+                byte[] buffer = new byte[MagicNum.bufferSize];
+
+                while(true)
+                {
+                    ShowMenu.ManageGroupMenu(groups, curPage);
+                    WriteLine("2");
+                    IOHelper.WriteBorder();
+                    WriteLine(" < Press ESC to cancel >");
+
+                    Write(" Enter chat group ID: ");
+                    string groupIDString = "";
+                    switch(Misc.InputData(ref groupIDString, "Chat group ID", 1, 5, false))
+                    {
+                        case null: return;
+                        case true: break;
+                        case false: continue;
+                    }
+
+                    int groupID;
+
+                    try
+                    {
+                        groupID = Convert.ToInt32(groupIDString);
+                        
+                        if(groupID < 1)
+                            throw new FormatException();
+                    }
+                    catch (FormatException)
+                    {
+                        WriteLine(" Invalid ID");
+                        continue;
+                    }
+
+                    if (CommandHandler.Stream(stream, ref buffer, new(CommandType.DeleteGroup, groupID.ToString()), out _))
+                    {
+                        IOHelper.WriteBorder();
+                        WriteLine(" Deleted chat group successfully!");
+                        ReadKey(true);
+                    }
+                    
+                    return;
+                }
+            }
+
+            public static void JoinChatGroup(NetworkStream stream, List<ChatGroup> groups, int curPage, out ChatGroup? group)
+            {
+                byte[] buffer = new byte[MagicNum.bufferSize];
+                group = null;
+
+                while(true)
+                {
+                    ShowMenu.JoinGroupMenu(groups, curPage);
+                    WriteLine("1");
+                    IOHelper.WriteBorder();
+                    WriteLine(" < Press ESC to cancel >");
+
+                    Write(" Enter chat group ID: ");
+                    string groupIDString = "";
+                    switch(Misc.InputData(ref groupIDString, "Chat group ID", 1, 5, false))
+                    {
+                        case null: return;
+                        case true: break;
+                        case false: continue;
+                    }
+
+                    int groupID;
+
+                    try
+                    {
+                        groupID = Convert.ToInt32(groupIDString);
+
+                        if(groupID < 1)
+                            throw new FormatException();
+                    }
+                    catch (FormatException)
+                    {
+                        WriteLine(" Invalid ID");
+                        continue;
+                    }
+
+                    if (CommandHandler.Stream(stream, ref buffer, new(CommandType.JoinGroup, groupID.ToString()), out Command receivedCmd))
+                    {
+                        group = ChatGroup.Deserialize(receivedCmd.Payload);
+
+                        if(group == null)
+                        {
+                            WriteLine(" Error: Received invalid chat group data");
+                            ReadKey(true);
+                            return;
+                        }
+                    }
+                    
+                    return;
+                }
+            }
+
+            public static void StartChatGroup(NetworkStream stream, ChatGroup joinedGroup)
+            {
+                Clear();
+                IOHelper.WriteHeader("Zelo");
+                WriteLine(" All chat commands:");
+                ShowMenu.ChatCommands();
+                IOHelper.WriteBorder();
+                WriteLine(" Press any key to continue...");
+            }
+
         }
 
         public class ShowMenu
@@ -862,13 +994,13 @@ class Client
                 Write(" Enter Choice: ");
             }
 
-            public static void PrivateMsgMenu(List<User> users, int page)
+            public static void PrivateMsgMenu(List<User> users, int curPage)
             {
                 Clear();
                 IOHelper.WriteHeader("Zelo");
-                WriteLine($" List of registered users (Page {page + 1}/{users.Count / 10 + 1}):");
+                WriteLine($" List of registered users (Page {curPage + 1}/{users.Count / 10 + 1}):");
 
-                foreach(User user in users.GetRange(page * 10, 10))
+                foreach(User user in users.GetRange(curPage * 10, Math.Min(users.Count - curPage * 10, 10)))
                 {
                     WriteLine($" • {user.ToString(false)}");
                 }
@@ -893,13 +1025,13 @@ class Client
                 Write(" Enter Choice: ");
             }
 
-            public static void JoinGroupMenu(List<ChatGroup> groups, int page)
+            public static void JoinGroupMenu(List<ChatGroup> groups, int curPage)
             {
                 Clear();
                 IOHelper.WriteHeader("Zelo");
-                WriteLine($" List of chat groups (Page {page + 1}/{groups.Count / 10 + 1}):");
+                WriteLine($" List of chat groups (Page {curPage + 1}/{groups.Count / 10 + 1}):");
 
-                foreach(ChatGroup group in groups.GetRange(page * 10, Math.Min(groups.Count - page * 10, 10)))
+                foreach(ChatGroup group in groups.GetRange(curPage * 10, Math.Min(groups.Count - curPage * 10, 10)))
                 {
                     WriteLine($" • {group.ToString(true)}");
                 }
@@ -913,15 +1045,15 @@ class Client
                 Write(" Enter Choice: ");
             }
 
-            public static void ManageGroupMenu(List<ChatGroup> groups, int page)
+            public static void ManageGroupMenu(List<ChatGroup> groups, int curPage)
             {
                 Clear();
                 IOHelper.WriteHeader("Zelo");
-                WriteLine($" List of created chat groups (Page {page + 1}/{groups.Count / 10 + 1}):");
+                WriteLine($" List of created chat groups (Page {curPage + 1}/{groups.Count / 10 + 1}):");
 
-                foreach(ChatGroup group in groups.GetRange(page * 10, Math.Min(groups.Count - page * 10, 10)))
+                foreach(ChatGroup group in groups.GetRange(curPage * 10, Math.Min(groups.Count - curPage * 10, 10)))
                 {
-                    WriteLine($" • {group.ToString(true)}");
+                    WriteLine($" • {group.ToString(false)}");
                 }
 
                 IOHelper.WriteBorder();
@@ -932,6 +1064,16 @@ class Client
                 WriteLine(" 0. Return");
                 IOHelper.WriteBorder();
                 Write(" Enter Choice: ");
+            }
+        
+            public static void ChatCommands()
+            {
+                WriteLine(" /help         -- Show all chat commands");
+                WriteLine(" /info         -- Show info of chat group/partner");
+                WriteLine(" /clear /cls   -- Clear console");
+                WriteLine(" /reload       -- Clear console then re-write all messages");
+                WriteLine(" /leave        -- Leave chat room");
+                WriteLine(" You can also leave using 'ESC' key");
             }
         }
 

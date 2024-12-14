@@ -308,7 +308,7 @@ static class DbHelper
         }
     }
 
-    public static async Task<(bool success, string errorMessage, ChatGroup? requestedGroup)> GetChatGroup(int groupID)
+    public static async Task<(ChatGroup? requestedGroup, string errorMessage)> GetChatGroup(int groupID)
     {
         string query = "SELECT GroupName, CreatorID, CreatedTime, OnlineCount FROM ChatGroups WHERE GroupID = @groupID";
 
@@ -323,18 +323,20 @@ static class DbHelper
             using var reader = await cmd.ExecuteReaderAsync();
 
             if (! await reader.ReadAsync()) // Chat group not found
-                return (false, $"No chat group with ID '{groupID}' found", null);
+                return (null, $"No chat group with ID '{groupID}' found");
 
-            return (true, "", new(reader.GetString("GroupName"), reader.GetInt32("CreatorID"))
+            return (new()
             {
                 GroupID = groupID,
+                GroupName = reader.GetString("GroupName"),
+                CreatorID = reader.GetInt32("CreatorID"),
                 CreatedTime = reader.GetDateTime("CreatedTime"),
                 OnlineCount = reader.GetInt32("OnlineCount")
-            });
+            }, "");
         }
         catch (MySqlException ex)
         {
-            return (false, ex.Message, null);
+            return (null, ex.Message);
         }
     }
     
@@ -407,8 +409,8 @@ static class DbHelper
 
     public static async Task<(bool success, string errorMessage)> UpdateChatGroup(ChatGroup updatedGroup)
     {
-        if (updatedGroup.GroupID == null)
-            return (false, "Null GroupID");
+        if (updatedGroup.GroupID < 1)
+            return (false, "Invalid GroupID");
 
         string query = "UPDATE ChatGroups SET GroupName = @newGroupName, OnlineCount = @onlineCount WHERE GroupID = @groupID";
 

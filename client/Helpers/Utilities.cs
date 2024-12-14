@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-class MagicNumbers
+class MagicNum
 {
     public const int
         usernameMin = 6, usernameMax = 50,
@@ -26,11 +26,11 @@ class Utilities
     // Hash & verify password
     public static PasswordSet HashPassword(string pwd)
     {
-        byte[] salt = new byte[MagicNumbers.pwdSaltLen];
+        byte[] salt = new byte[MagicNum.pwdSaltLen];
         RandomNumberGenerator.Fill(salt);
 
         using var pbkdf2 = new Rfc2898DeriveBytes(EncodeString(pwd), salt, 5000, HashAlgorithmName.SHA256);
-        byte[] pwdHash = pbkdf2.GetBytes(MagicNumbers.pwdHashLen);
+        byte[] pwdHash = pbkdf2.GetBytes(MagicNum.pwdHashLen);
 
         return new(pwdHash, salt);
     }
@@ -38,7 +38,7 @@ class Utilities
     public static bool VerifyPassword(string pwd, byte[] storedPwdHash, byte[] storedSalt)
     {
         using var pbkdf2 = new Rfc2898DeriveBytes(EncodeString(pwd), storedSalt, 5000, HashAlgorithmName.SHA256);
-        byte[] pwdHash = pbkdf2.GetBytes(MagicNumbers.pwdHashLen);
+        byte[] pwdHash = pbkdf2.GetBytes(MagicNum.pwdHashLen);
 
         return pwdHash.SequenceEqual(storedPwdHash);
     }

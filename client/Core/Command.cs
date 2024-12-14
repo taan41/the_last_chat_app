@@ -9,7 +9,7 @@ enum CommandType
     RequestUserList, UserAsPartner, DeletePartner,
     RequestCreatedGroups, CreateGroup, DeleteGroup,
     RequestGroupList, JoinGroup, LeaveGroup,
-    Message,
+    Message, RefreshGroupInfo,
     Disconnect
 }
 

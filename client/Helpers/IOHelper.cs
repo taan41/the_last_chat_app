@@ -152,7 +152,7 @@ static class IOHelper
                     break;
 
                 default:
-                    if((startCursorLeft + index + 1) / WindowWidth < WindowHeight && sb.Length < (limit ?? MagicNumbers.inputLimit))
+                    if((startCursorLeft + index + 1) / WindowWidth < WindowHeight && sb.Length < (limit ?? MagicNum.inputLimit))
                         HandleDefaultKey(sb, ref index, key.KeyChar, startCursorLeft, intercept);
                     break;
             }

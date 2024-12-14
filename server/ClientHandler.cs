@@ -8,6 +8,8 @@ class ClientHandler
     readonly TcpClient client;
     readonly NetworkStream stream;
     readonly EndPoint endPoint;
+    readonly object handlerLock = new();
+    ChatGroupHandler? groupHandler;
 
     bool loggedIn = false;
     int uid;
@@ -32,7 +34,8 @@ class ClientHandler
             Memory<byte> memory = new(buffer, 0, buffer.Length);
             int bytesRead;
 
-            Command? receivedCmd, cmdToSend = new();
+            Command? receivedCmd;
+            Command cmdToSend = new();
             User? user = null, partner = null, tempUser = null;
 
             while((bytesRead = await stream.ReadAsync(memory, token)) > 0)
@@ -46,11 +49,11 @@ class ClientHandler
                         break;
 
                     case CommandType.CheckUsername:
-                        (_, cmdToSend) = await CheckUsername(receivedCmd);
+                        cmdToSend = await CheckUsername(receivedCmd);
                         break;
 
                     case CommandType.Register:
-                        (_, cmdToSend) = await Register(receivedCmd);
+                        cmdToSend = await Register(receivedCmd);
                         break;
 
                     case CommandType.RequestUserPwd:
@@ -68,24 +71,42 @@ class ClientHandler
                         break;
 
                     case CommandType.ChangeNickname:
-                        (_, cmdToSend, user) = await ChangeNickname(receivedCmd, user);
+                        (cmdToSend, user) = await ChangeNickname(receivedCmd, user);
                         break;
 
                     case CommandType.ChangePassword:
-                        (_, cmdToSend, user) = await ChangePassword(receivedCmd, user);
+                        (cmdToSend, user) = await ChangePassword(receivedCmd, user);
                         break;
 
                     case CommandType.RequestCreatedGroups:
-                        (_, cmdToSend) = await RequestCreatedGroups(receivedCmd);
+                        cmdToSend = await RequestCreatedGroups(receivedCmd);
                         break;
 
                     case CommandType.CreateGroup:
-                        (_, cmdToSend) = await CreateGroup(receivedCmd);
+                        cmdToSend = await CreateGroup(receivedCmd);
+                        break;
+
+                    case CommandType.DeleteGroup:
+                        if(user != null && user.UID != null)
+                            cmdToSend = await DeleteGroup(receivedCmd, (int) user.UID);
                         break;
 
                     case CommandType.RequestGroupList:
-                        (_, cmdToSend) = await RequestAllGroupList(receivedCmd);
+                        cmdToSend = await RequestAllGroupList(receivedCmd);
                         break;
+
+                    case CommandType.JoinGroup:
+                        cmdToSend = await JoinGroup(receivedCmd);
+                        break;
+
+                    case CommandType.LeaveGroup:
+                        cmdToSend = LeaveGroup(receivedCmd);
+                        break;
+
+                    case CommandType.Message:
+                        cmdToSend = ProcessMessage(receivedCmd);
+                        break;
+                        
 
                     case CommandType.Disconnect:
                         stream.Close();
@@ -99,7 +120,8 @@ class ClientHandler
                         break;
                 }
 
-                await stream.WriteAsync(EncodeString(Command.Serialize(cmdToSend)), token);
+                if (cmdToSend.CommandType != CommandType.Empty)
+                    await stream.WriteAsync(EncodeString(Command.Serialize(cmdToSend)), token);
             }
         }
         catch(OperationCanceledException) {}
@@ -112,7 +134,20 @@ class ClientHandler
         }
     }
 
-    private async Task<(bool success, Command cmdToSend)> CheckUsername(Command receivedCmd)
+    public void SetUpGroupHandler(ChatGroupHandler _groupHandler)
+    {
+        lock(handlerLock)
+        {
+            groupHandler = _groupHandler;
+        }
+    }
+
+    public async Task EchoMessage(Message message)
+    {
+        await stream.WriteAsync(EncodeString(Command.Serialize(new(CommandType.Message, Message.Serialize(message)))));
+    }
+
+    private async Task<Command> CheckUsername(Command receivedCmd)
     {
         Command cmdToSend = new();
 
@@ -125,10 +160,10 @@ class ClientHandler
         else
             Helper.DBErrorHandler(errorMessage, endPoint, "check username's avaibility", ref cmdToSend);
 
-        return (success, cmdToSend);
+        return cmdToSend;
     }
 
-    private async Task<(bool success, Command cmdToSend)> Register(Command receivedCmd)
+    private async Task<Command> Register(Command receivedCmd)
     {
         Command cmdToSend = new();
 
@@ -137,7 +172,7 @@ class ClientHandler
         {
             cmdToSend.SetError("Server-side error");
             LogManager.AddLog($"Error from {endPoint} trying to register: Invalid user data");
-            return (false, cmdToSend);
+            return cmdToSend;
         }
 
         (bool success, string errorMessage) = await DbHelper.AddUser(registeredUser);
@@ -150,7 +185,7 @@ class ClientHandler
         else 
             Helper.DBErrorHandler(errorMessage, endPoint, "register", ref cmdToSend);
 
-        return (success, cmdToSend);
+        return cmdToSend;
     }
 
     private async Task<(bool success, Command cmdToSend, User? requestedUser)> RequestUserPwd(Command receivedCmd)
@@ -195,7 +230,7 @@ class ClientHandler
         }
     }
 
-    private async Task<(bool success, Command cmdToSend, User? newUser)> ChangeNickname(Command receivedCmd, User? oldUser)
+    private async Task<(Command cmdToSend, User? newUser)> ChangeNickname(Command receivedCmd, User? oldUser)
     {
         Command cmdToSend = new();
 
@@ -203,7 +238,7 @@ class ClientHandler
         {
             cmdToSend.SetError("Server-side error");
             LogManager.AddLog($"Error from {endPoint} trying to change nickname: Null User");
-            return (false, cmdToSend, null);
+            return (cmdToSend, null);
         }
         else
         {
@@ -218,17 +253,17 @@ class ClientHandler
             {
                 cmdToSend.Set(receivedCmd.CommandType, null);
                 LogManager.AddLog($"{endPoint} updated '{oldUser}': New nickname ('{oldUser.Nickname}' -> '{updatedUser.Nickname}')");
-                return (success, cmdToSend, updatedUser);
+                return (cmdToSend, updatedUser);
             }
             else
             {
                 Helper.DBErrorHandler(errorMessage, endPoint, "change nickname", ref cmdToSend);
-                return (success, cmdToSend, oldUser);
+                return (cmdToSend, oldUser);
             }
         }
     }
 
-    private async Task<(bool success, Command cmdToSend, User? newUser)> ChangePassword(Command receivedCmd, User? oldUser)
+    private async Task<(Command cmdToSend, User? newUser)> ChangePassword(Command receivedCmd, User? oldUser)
     {
         Command cmdToSend = new();
 
@@ -236,7 +271,7 @@ class ClientHandler
         {
             cmdToSend.SetError("Server-side error");
             LogManager.AddLog($"Error from {endPoint} trying to change password: Null User");
-            return (false, cmdToSend, null);
+            return (cmdToSend, null);
         }
         else
         {
@@ -251,17 +286,17 @@ class ClientHandler
             {
                 cmdToSend.Set(receivedCmd.CommandType, null);
                 LogManager.AddLog($"{endPoint} updated '{oldUser}': New password");
-                return (success, cmdToSend, updatedUser);
+                return (cmdToSend, updatedUser);
             }
             else
             {
                 Helper.DBErrorHandler(errorMessage, endPoint, "change password", ref cmdToSend);
-                return (success, cmdToSend, oldUser);
+                return (cmdToSend, oldUser);
             }
         }
     }
 
-    private async Task<(bool success, Command cmdToSend)> RequestCreatedGroups(Command receivedCmd)
+    private async Task<Command> RequestCreatedGroups(Command receivedCmd)
     {
         Command cmdToSend = new();
 
@@ -270,15 +305,15 @@ class ClientHandler
         if(groups != null)
         {
             cmdToSend.Set(receivedCmd.CommandType, JsonSerializer.Serialize(groups));
-            return (true, cmdToSend);
+            return cmdToSend;
         }
         else 
             Helper.DBErrorHandler(errorMessage, endPoint, "request created group list", ref cmdToSend);
 
-        return (false, cmdToSend);
+        return cmdToSend;
     }
 
-    private async Task<(bool success, Command cmdToSend)> CreateGroup(Command receivedCmd)
+    private async Task<Command> CreateGroup(Command receivedCmd)
     {
         Command cmdToSend = new();
 
@@ -287,7 +322,7 @@ class ClientHandler
         {
             cmdToSend.SetError("Server-side error");
             LogManager.AddLog($"Error from {endPoint} trying to create chat group: Invalid chat group data");
-            return (false, cmdToSend);
+            return cmdToSend;
         }
 
         (bool success, string errorMessage) = await DbHelper.AddChatGroup(chatGroup);
@@ -300,10 +335,36 @@ class ClientHandler
         else 
             Helper.DBErrorHandler(errorMessage, endPoint, "create chat group", ref cmdToSend);
 
-        return (success, cmdToSend);
+        return cmdToSend;
     }
 
-    private async Task<(bool success, Command cmdToSend)> RequestAllGroupList(Command receivedCmd)
+    private async Task<Command> DeleteGroup(Command receivedCmd, int userID)
+    {
+        Command cmdToSend = new();
+        int groupID = Convert.ToInt32(receivedCmd.Payload);
+
+        (ChatGroup? groupToDel, string _) = await DbHelper.GetChatGroup(groupID);
+
+        if(groupToDel == null || groupToDel.CreatorID != userID)
+        {
+            cmdToSend.SetError("Invalid chat group ID");
+            return cmdToSend;
+        }
+
+        (bool success, string errorMessage) = await DbHelper.DeleteChatGroup(groupID);
+
+        if(success)
+        {
+            cmdToSend.Set(receivedCmd.CommandType, null);
+            LogManager.AddLog($"{endPoint} deleted chat group {groupToDel.ToString(false)}");
+        }
+        else 
+            Helper.DBErrorHandler(errorMessage, endPoint, "delete chat group", ref cmdToSend);
+
+        return cmdToSend;
+    }
+
+    private async Task<Command> RequestAllGroupList(Command receivedCmd)
     {
         Command cmdToSend = new();
 
@@ -312,12 +373,74 @@ class ClientHandler
         if(groups != null)
         {
             cmdToSend.Set(receivedCmd.CommandType, JsonSerializer.Serialize(groups));
-            return (true, cmdToSend);
+            return cmdToSend;
         }
         else 
             Helper.DBErrorHandler(errorMessage, endPoint, "request group list", ref cmdToSend);
 
-        return (false, cmdToSend);
+        return cmdToSend;
+    }
+
+    private async Task<Command> JoinGroup(Command receivedCmd)
+    {
+        Command cmdToSend = new();
+        int groupID = Convert.ToInt32(receivedCmd.Payload);
+
+        (ChatGroup? groupToJoin, string errorMessage) = await DbHelper.GetChatGroup(groupID);
+
+        if(groupToJoin != null)
+        {
+            cmdToSend.Set(receivedCmd.CommandType, ChatGroup.Serialize(groupToJoin));
+
+            // Logic here
+            Server.JoinChatGroup(groupToJoin, this);
+
+            return cmdToSend;
+        }
+        else 
+            Helper.DBErrorHandler(errorMessage, endPoint, "join chat group", ref cmdToSend);
+
+        return cmdToSend;
+    }
+
+    private Command LeaveGroup(Command receivedCmd)
+    {
+        Command cmdToSend = new(receivedCmd.CommandType, null);
+
+        lock(handlerLock)
+        {
+            groupHandler?.RemoveClient(this);
+            groupHandler = null;
+        }
+
+        return cmdToSend;
+    }
+
+    private Command ProcessMessage(Command receivedCmd)
+    {
+        Command cmdToSend = new();
+        
+        if (groupHandler != null)
+        {
+            Message? receivedMsg = Message.Deserialize(receivedCmd.Payload);
+
+            if (receivedMsg == null)
+            {
+                cmdToSend.SetError("Invalid message data");
+                LogManager.AddLog($" Error from {endPoint} trying to send msg: Invalid msg data");
+                return cmdToSend;
+            }
+
+            lock(handlerLock)
+                groupHandler.EchoMessage(receivedMsg);
+        }
+        else
+        {
+            cmdToSend.SetError("Server-side error");
+            LogManager.AddLog($" Error from {endPoint} trying to send msg: Null groupHandler");
+        }
+
+        return cmdToSend;
     }
 
 

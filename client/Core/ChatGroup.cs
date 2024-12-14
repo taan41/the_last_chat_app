@@ -3,7 +3,7 @@ using System.Text.Json;
 [Serializable]
 class ChatGroup
 {
-    public int? GroupID { get; set; }
+    public int GroupID { get; set; } = -1;
     public string GroupName { get; set; } = "";
     public int? CreatorID { get; set; }
     public DateTime? CreatedTime { get; set; }
