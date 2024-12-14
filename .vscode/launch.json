@@ -1,0 +1,19 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": ".NET Core Launch (universal) (terminal)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "custom csharp build",
+            "program": "${workspaceFolder}/${relativeFileDirname}/bin/Debug/net8.0/${relativeFileDirname}.exe",
+            "args": [],
+            "cwd": "${relativeFileDirname}",
+            "stopAtEntry": true,
+            "console": "integratedTerminal"
+        }
+    ]
+}

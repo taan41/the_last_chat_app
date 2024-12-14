@@ -2,13 +2,13 @@ using System.Text.Json;
 
 enum CommandType
 {
-    Empty, Ping, Error, RequestAES,
+    Empty, Ping, Error, GetAES,
     CheckUsername, Register,
-    RequestUserPwd, Login, Logout,
+    GetUserPwd, Login, Logout,
     ChangeNickname, ChangePassword,
-    RequestUserList, UserAsPartner, GetPartnerHistory, DeletePartner,
-    RequestCreatedGroups, CreateGroup, DeleteGroup,
-    RequestGroupList, RequestGroupInfo, RequestGroupHistory, 
+    GetUserList, SetPartner, GetPartnerHistory, RemovePartner,
+    GetCreatedGroups, CreateGroup, DeleteGroup,
+    GetGroupList, GetGroupInfo, GetGroupHistory, 
     JoinGroup, LeaveGroup,
     Message, MessageEcho,
     Disconnect

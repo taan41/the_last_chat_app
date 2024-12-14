@@ -1,7 +1,5 @@
 using System.Data;
-using System.Data.SqlTypes;
 using MySql.Data.MySqlClient;
-using Org.BouncyCastle.OpenSsl;
 
 static class DbHelper
 {
@@ -168,6 +166,8 @@ static class DbHelper
             if (! await reader.ReadAsync()) // User not found
                 return (null, $"No user with username '{username}' found");
 
+            PasswordSet? pwdSet = null;
+
             if (getPwd)
             {
                 byte[] pwdHash = new byte[MagicNumbers.pwdHashLen];
@@ -176,24 +176,60 @@ static class DbHelper
                 reader.GetBytes("PasswordHash", 0, pwdHash, 0, MagicNumbers.pwdHashLen);
                 reader.GetBytes("Salt", 0, salt, 0, MagicNumbers.pwdSaltLen);
 
-                return (new()
-                {
-                    UID = reader.GetInt32("UserID"),
-                    Username = reader.GetString("Username"),
-                    Nickname = reader.GetString("Nickname"),
-                    PwdSet = new(pwdHash, salt)
-                }, "");
+                pwdSet = new(pwdHash, salt);
             }
-            else
+            
+            return (new()
             {
-                return (new()
-                {
-                    UID = reader.GetInt32("UserID"),
-                    Username = reader.GetString("Username"),
-                    Nickname = reader.GetString("Nickname"),
-                    PwdSet = null
-                }, "");
+                UID = reader.GetInt32("UserID"),
+                Username = reader.GetString("Username"),
+                Nickname = reader.GetString("Nickname"),
+                PwdSet = pwdSet
+            }, "");
+        }
+        catch (MySqlException ex)
+        {
+            return (null, ex.Message);
+        }
+    }
+    
+    public static async Task<(User? requestedUser, string errorMessage)> GetUser(int userID, bool getPwd)
+    {
+        string query = "SELECT UserID, Username, Nickname, PasswordHash, Salt FROM Users WHERE UserID=@userID";
+
+        try
+        {
+            using MySqlConnection conn = new(connectionString);
+            await conn.OpenAsync();
+
+            using MySqlCommand cmd = new(query, conn);
+            cmd.Parameters.AddWithValue("@userID", userID);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            if (! await reader.ReadAsync()) // User not found
+                return (null, $"No user with ID '{userID}' found");
+
+            PasswordSet? pwdSet = null;
+
+            if (getPwd)
+            {
+                byte[] pwdHash = new byte[MagicNumbers.pwdHashLen];
+                byte[] salt = new byte[MagicNumbers.pwdSaltLen];
+
+                reader.GetBytes("PasswordHash", 0, pwdHash, 0, MagicNumbers.pwdHashLen);
+                reader.GetBytes("Salt", 0, salt, 0, MagicNumbers.pwdSaltLen);
+
+                pwdSet = new(pwdHash, salt);
             }
+            
+            return (new()
+            {
+                UID = reader.GetInt32("UserID"),
+                Username = reader.GetString("Username"),
+                Nickname = reader.GetString("Nickname"),
+                PwdSet = pwdSet
+            }, "");
         }
         catch (MySqlException ex)
         {
@@ -219,6 +255,7 @@ static class DbHelper
             using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
+                PasswordSet? pwdSet = null;
 
                 if (getPwd)
                 {
@@ -228,24 +265,16 @@ static class DbHelper
                     reader.GetBytes("PasswordHash", 0, pwdHash, 0, MagicNumbers.pwdHashLen);
                     reader.GetBytes("Salt", 0, salt, 0, MagicNumbers.pwdSaltLen);
 
-                    users.Add(new()
-                    {
-                        UID = reader.GetInt32("UserID"),
-                        Username = reader.GetString("Username"),
-                        Nickname = reader.GetString("Nickname"),
-                        PwdSet = new(pwdHash, salt)
-                    });
+                    pwdSet = new(pwdHash, salt);
                 }
-                else
+                
+                users.Add(new()
                 {
-                    users.Add(new()
-                    {
-                        UID = reader.GetInt32("UserID"),
-                        Username = reader.GetString("Username"),
-                        Nickname = reader.GetString("Nickname"),
-                        PwdSet = null
-                    });
-                }
+                    UID = reader.GetInt32("UserID"),
+                    Username = reader.GetString("Username"),
+                    Nickname = reader.GetString("Nickname"),
+                    PwdSet = pwdSet
+                });
             }
 
             return (users, "");
@@ -258,7 +287,7 @@ static class DbHelper
 
     public static async Task<(bool success, string errorMessage)> UpdateUser(User updatedUser)
     {
-        if (updatedUser.UID == null || updatedUser.PwdSet == null)
+        if (updatedUser.UID == -1 || updatedUser.PwdSet == null)
             return (false, "Null UID/Password Set");
 
         string query = "UPDATE Users SET Nickname = @newNickname, PasswordHash = @newPwdHash, Salt = @newSalt WHERE UserID = @userID";
@@ -360,7 +389,7 @@ static class DbHelper
                 {
                     GroupName = reader.GetString("GroupName"),
                     GroupID = reader.GetInt32("GroupID"),
-                    CreatorID = reader.IsDBNullAsync(reader.GetOrdinal("CreatorID")).Result ? null : reader.GetInt32("CreatorID"),
+                    CreatorID = reader.IsDBNull(reader.GetOrdinal("CreatorID")) ? null : reader.GetInt32("CreatorID"),
                     CreatedTime = reader.GetDateTime("CreatedTime"),
                     OnlineCount = reader.GetInt32("OnlineCount")
                 });
@@ -407,12 +436,14 @@ static class DbHelper
         }
     }
 
-    public static async Task<(bool success, string errorMessage)> UpdateChatGroup(ChatGroup updatedGroup)
+    public static async Task<(bool success, string errorMessage)> UpdateChatGroup(ChatGroup updatedGroup, bool updateOnlCount)
     {
         if (updatedGroup.GroupID < 1)
             return (false, "Invalid GroupID");
 
-        string query = "UPDATE ChatGroups SET GroupName = @newGroupName, OnlineCount = @onlineCount WHERE GroupID = @groupID";
+        string query = updateOnlCount ?
+            "UPDATE ChatGroups SET GroupName = @newGroupName, OnlineCount = @onlineCount WHERE GroupID = @groupID" :
+            "UPDATE ChatGroups SET GroupName = @newGroupName WHERE GroupID = @groupID";
 
         try
         {
@@ -421,8 +452,8 @@ static class DbHelper
 
             using MySqlCommand cmd = new(query, conn);
             cmd.Parameters.AddWithValue("@newGroupName", updatedGroup.GroupName);
-            cmd.Parameters.AddWithValue("@onlineCount", updatedGroup.OnlineCount);
             cmd.Parameters.AddWithValue("@groupID", updatedGroup.GroupID);
+            if(updateOnlCount) cmd.Parameters.AddWithValue("@onlineCount", updatedGroup.OnlineCount);
 
             await cmd.ExecuteNonQueryAsync();
 

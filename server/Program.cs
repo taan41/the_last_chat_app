@@ -2,6 +2,7 @@
 using System.Net.Sockets;
 
 using static System.Console;
+using static ServerHelper;
 
 class Server
 {
@@ -15,6 +16,8 @@ class Server
     {
         string? serverIP = null;
         int port = defaultPort;
+
+        ThreadPool.SetMinThreads(20, 20);
 
         try
         {
@@ -60,7 +63,6 @@ class Server
 
         while(!done)
         {
-            // Clear();
             IOHelper.WriteHeader("Zelo Server Control Center");
             WriteLine(" MySql database info:");
 
@@ -106,7 +108,7 @@ class Server
     {
         while(true)
         {
-            ServerHelper.ShowStartUpMenu(serverIP, port);
+            ShowMenu.StartUpMenu(serverIP, port);
 
             switch(IOHelper.ReadInput(false))
             {
@@ -118,7 +120,7 @@ class Server
                     Write(" Enter IP: ");
                     serverIP = ReadLine();
 
-                    if(serverIP == null || !ServerHelper.CheckIPv4(serverIP))
+                    if(serverIP == null || !Misc.CheckIPv4(serverIP))
                     {
                         serverIP = null;
                         WriteLine(" Invalid IP.");
@@ -144,7 +146,7 @@ class Server
                     continue;
 
                 case "4":
-                    while(ServerHelper.ViewActivityLog());
+                    while(ShowMenu.ActivityLog());
                     continue;
 
                 case "0": case null:
@@ -187,12 +189,26 @@ class Server
     {
         while(true)
         {
-            ServerHelper.ShowControlMenu(serverIP, port);
+            ShowMenu.ControlMenu(serverIP, port);
 
             switch(IOHelper.ReadInput(false))
             {
+                // WriteLine(" 1. View connected clients");
+                // WriteLine(" 2. Manage chat groups");
+                // WriteLine(" 3. Broadcast notice");
+                case "1":
+                    ViewConnectedClients();
+                    continue;
+
+                case "2":
+                    ManageChatGroups();
+                    continue;
+
+                case "3":
+                    break;
+
                 case "4":
-                    while(ServerHelper.ViewActivityLog());
+                    while(ShowMenu.ActivityLog());
                     continue;
 
                 case "0": case null:
@@ -202,6 +218,140 @@ class Server
 
                 default: continue;
             }
+        }
+    }
+
+    static void ViewConnectedClients()
+    {
+        int curPage = 0, maxPage;
+
+        while(true)
+        {
+            maxPage = (clientHanlders.Count - 1) / 10;
+
+            ShowMenu.ConnectedClients(clientHanlders, curPage);
+
+            switch (IOHelper.ReadInput(false))
+            {
+                case "8":
+                    if (curPage > 0)
+                        curPage--;
+                    continue;
+
+                case "9":
+                    if (curPage < maxPage)
+                        curPage++;
+                    continue;
+
+                case "0": case null:
+                    return;
+
+                default:
+                    continue;
+            }
+
+        }
+    }
+
+    static async void ManageChatGroups()
+    {
+        (List<ChatGroup>? groups, _) = await DbHelper.GetAllChatGroup();
+
+        if (groups == null)
+            return;
+        
+        string? input;
+        int curPage = 0, maxPage = (groups.Count - 1) / 10, action = 0;
+
+
+        while(true)
+        {
+            ShowMenu.ManageGroups(groups, curPage);
+            var (Left, Top) = GetCursorPosition();
+            WriteLine();
+            WriteLine(" Warning: Very buggy due to unknown thread-related (?) error");
+            SetCursorPosition(Left, Top);
+
+            switch (IOHelper.ReadInput(false))
+            {
+                case "1":
+                    action = 1;
+                    break;
+                
+                case "2":
+                    action = 2;
+                    break;
+
+                case "8":
+                    if (curPage > 0)
+                        curPage--;
+                    continue;
+
+                case "9":
+                    if (curPage < maxPage)
+                        curPage++;
+                    continue;
+
+                case "0": case null:
+                    return;
+
+                default:
+                    continue;
+            }
+
+            IOHelper.WriteBorder();
+            Write(" Enter group's ID: ");
+            input = IOHelper.ReadInput(5, false);
+
+            if (input == null)
+            {
+                action = 0;
+                continue;
+            }
+
+            int groupID;
+            ChatGroup? groupToChange;
+
+            try
+            {
+                groupID = Convert.ToInt32(input);
+                
+                if (groupID < 1)
+                    throw new FormatException();
+
+                if ((groupToChange = groups.Find(group => group.GroupID == groupID)) == null)
+                    throw new FormatException();
+            }
+            catch (FormatException)
+            {
+                WriteLine(" Error: Invalid ID");
+                ReadKey(true);
+                continue;
+            }
+
+            if (action == 1)
+            {
+                Write(" Enter group's Name: ");
+                input = IOHelper.ReadInput(MagicNumbers.groupNameMax, false);
+
+                if (input == null)
+                {
+                    action = 0;
+                    continue;
+                }
+
+                groupToChange.GroupName = input;
+                await DbHelper.UpdateChatGroup(groupToChange, false);
+            }
+            else if (action == 2)
+            {
+                groups.Remove(groupToChange);
+                await DbHelper.DeleteChatGroup(groupID);
+                groupHandlers.Find(handler => handler.GetGroup != null && handler.GetGroup.GroupID == groupID)?.Dispose();
+            }
+            
+            action = 0;
+            continue;
         }
     }
 
@@ -247,96 +397,11 @@ class Server
         }
     }
 
-    private class ServerHelper
+    public static void DisposeChatGroup(int groupID)
     {
-        public static bool CheckIPv4(string? ipAddress)
+        lock(groupHandlers)
         {
-            if(!IPAddress.TryParse(ipAddress, out _))
-                return false;
-
-            string[] parts = ipAddress.Split('.');
-            if(parts.Length != 4) return false;
-
-            foreach(string part in parts)
-            {
-                if (!int.TryParse(part, out int number))
-                    return false;
-
-                if (number < 0 || number > 255)
-                    return false;
-
-                if (part.Length > 1 && part[0] == '0')
-                    return false;
-            }
-
-            return true;
+            groupHandlers.Find(handler => handler.GetGroup != null && handler.GetGroup.GroupID == groupID)?.Dispose();
         }
-
-        public static void ShowStartUpMenu(string? serverIP, int port)
-        {
-            Clear();
-            IOHelper.WriteHeader("Zelo Server Control Center");
-            WriteLine($" Server's IP: {serverIP ?? "Any"}");
-            WriteLine($" Server's port: {port}");
-            IOHelper.WriteBorder();
-            WriteLine(" 1. Start server");
-            WriteLine(" 2. Change IP");
-            WriteLine(" 3. Change port");
-            WriteLine(" 4. View activity log");
-            WriteLine(" 0. Shut down program");
-            IOHelper.WriteBorder();
-            Write(" Enter choice: ");
-        }
-
-        public static void ShowControlMenu(string? serverIP, int port)
-        {
-            Clear();
-            IOHelper.WriteHeader("Zelo Server Control Center");
-            WriteLine(" Server is online");
-            WriteLine($" Address: {serverIP ?? "Any"}");
-            WriteLine($" Port: {port}");
-            IOHelper.WriteBorder();
-            WriteLine(" 1. Manage connected clients");
-            WriteLine(" 2. Manage chat groups");
-            WriteLine(" 3. Broadcast message");
-            WriteLine(" 4. View activity log");
-            WriteLine(" 0. Shut down server");
-            IOHelper.WriteBorder();
-            Write(" Enter choice: ");
-        }
-
-        // Return false when leaving viewer
-        public static bool ViewActivityLog()
-        {
-            Clear();
-            IOHelper.WriteHeader("Zelo Server Control Center");
-            WriteLine(" Viewing activity log");
-            WriteLine(" 'DEL' to clear log");
-            WriteLine(" 'ESC' to return");
-            IOHelper.WriteBorder();
-            
-            LogManager.WriteCurrentLog();
-            LogManager.ToggleLogView(true);
-
-            // CancellationTokenSource leaveLogViewerToken = new();
-            // _ = Task.Run(() => LogManager.WriteNewLogAsync(leaveLogViewerToken.Token));
-
-            while(true)
-            {
-                ConsoleKey key = ReadKey(true).Key;
-
-                switch(key)
-                {
-                    case ConsoleKey.Escape:
-                        LogManager.ToggleLogView(false);
-                        return false;
-
-                    case ConsoleKey.Delete:
-                        LogManager.ClearLog();
-                        return true;
-                }
-            }
-        }
-
     }
 }

@@ -84,10 +84,11 @@ static class IOHelper
         StringBuilder sb = new();
         bool done = false;
         int index = 0, startCursorLeft = CursorLeft;
+        ConsoleKeyInfo key;
 
         while(!done)
         {
-            ConsoleKeyInfo key = ReadKey(true);
+            key = ReadKey(true);
 
             switch(key.Key)
             {

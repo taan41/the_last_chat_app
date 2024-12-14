@@ -22,7 +22,7 @@ class User
         => $"[ID: {UID}] Username: {Username}, Nickname: {Nickname}";
 
     public string ToString(bool showUsername)
-        => showUsername ? ToString(true) : $"[ID: {UID}] Nickname: {Nickname}";
+        => showUsername ? ToString() : $"[ID: {UID}] Nickname: {Nickname}";
     
     public static string Serialize(User user) =>
         JsonSerializer.Serialize(user);

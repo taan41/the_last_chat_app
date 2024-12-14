@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
-using Org.BouncyCastle.Asn1.Cms;
+
 using static Utilities;
 
 class ClientHandler
@@ -9,15 +9,12 @@ class ClientHandler
     readonly TcpClient client;
     readonly NetworkStream stream;
     readonly EndPoint endPoint;
-    readonly object handlerLock = new();
+
     ChatGroupHandler? groupHandler;
+    User? mainUser = null;
 
     public EndPoint EndPoint => endPoint;
-
-    bool loggedIn = false;
-    int uid;
-    string? nickname;
-    ChatGroupHandler? chatGroup;
+    public User? User => mainUser;
 
     public ClientHandler(TcpClient _client)
     {
@@ -39,7 +36,7 @@ class ClientHandler
             Command? receivedCmd;
             Command cmdToSend = new();
 
-            User? user = null, partner = null, tempUser = null;
+            User? partner = null, tempUser = null;
 
             while((bytesRead = await stream.ReadAsync(memory, token)) > 0)
             {
@@ -59,30 +56,48 @@ class ClientHandler
                         cmdToSend = await Register(receivedCmd);
                         break;
 
-                    case CommandType.RequestUserPwd:
-                        (cmdToSend, tempUser) = await RequestUserPwd(receivedCmd);
+                    case CommandType.GetUserPwd:
+                        (cmdToSend, tempUser) = await GetUserPwd(receivedCmd);
                         break;
 
                     case CommandType.Login:
-                        Login(receivedCmd, ref cmdToSend, ref user, tempUser);
+                        Login(receivedCmd, ref cmdToSend, ref mainUser, tempUser);
                         break;
 
                     case CommandType.Logout:
                         cmdToSend.Set(CommandType.Logout, null);
-                        LogManager.AddLog($"{endPoint} logged out from {user}");
-                        user = null;
+                        LogManager.AddLog($"{endPoint} logged out from {mainUser}");
+                        mainUser = null;
                         break;
 
                     case CommandType.ChangeNickname:
-                        (cmdToSend, user) = await ChangeNickname(receivedCmd, user);
+                        (cmdToSend, mainUser) = await ChangeNickname(receivedCmd, mainUser);
                         break;
 
                     case CommandType.ChangePassword:
-                        (cmdToSend, user) = await ChangePassword(receivedCmd, user);
+                        (cmdToSend, mainUser) = await ChangePassword(receivedCmd, mainUser);
+                        break;
+                        
+                    // GetUserList, UserAsPartner, GetPartnerHistory, DeletePartner,
+                    case CommandType.GetUserList:
+                        cmdToSend = await GetUserList(receivedCmd);
                         break;
 
-                    case CommandType.RequestCreatedGroups:
-                        cmdToSend = await RequestCreatedGroups(receivedCmd);
+                    case CommandType.SetPartner:
+                        (cmdToSend, partner) = await SetPartner(receivedCmd, mainUser);
+                        break;
+
+                    case CommandType.GetPartnerHistory:
+                        cmdToSend = await GetPartnerHistory(receivedCmd, mainUser, partner);
+                        break;
+
+                    case CommandType.RemovePartner:
+                        cmdToSend = RemovePartner(receivedCmd);
+                        partner = null;
+                        break;
+
+                    case CommandType.GetCreatedGroups:
+                        cmdToSend = await GetCreatedGroups(receivedCmd);
                         break;
 
                     case CommandType.CreateGroup:
@@ -90,24 +105,24 @@ class ClientHandler
                         break;
 
                     case CommandType.DeleteGroup:
-                        if(user != null && user.UID != -1)
-                            cmdToSend = await DeleteGroup(receivedCmd, user.UID);
+                        if(mainUser != null && mainUser.UID != -1)
+                            cmdToSend = await DeleteGroup(receivedCmd, mainUser.UID);
                         break;
 
-                    case CommandType.RequestGroupList:
-                        cmdToSend = await RequestAllGroupList(receivedCmd);
+                    case CommandType.GetGroupList:
+                        cmdToSend = await GetAllGroupList(receivedCmd);
+                        break;
+
+                    case CommandType.GetGroupInfo:
+                        cmdToSend = await GetGroupInfo(receivedCmd);
+                        break;
+
+                    case CommandType.GetGroupHistory:
+                        cmdToSend = await GetGroupHistory(receivedCmd);
                         break;
 
                     case CommandType.JoinGroup:
                         cmdToSend = await JoinGroup(receivedCmd);
-                        break;
-
-                    case CommandType.RequestGroupInfo:
-                        cmdToSend = await GetGroupInfo(receivedCmd);
-                        break;
-
-                    case CommandType.RequestGroupHistory:
-                        cmdToSend = await GetGroupHistory(receivedCmd);
                         break;
 
                     case CommandType.LeaveGroup:
@@ -150,7 +165,7 @@ class ClientHandler
         }
     }
 
-    public void SetUpGroupHandler(ChatGroupHandler _groupHandler)
+    public void SetUpGroupHandler(ChatGroupHandler? _groupHandler)
     {
         groupHandler = _groupHandler;
     }
@@ -202,7 +217,7 @@ class ClientHandler
         return cmdToSend;
     }
 
-    private async Task<(Command cmdToSend, User? requestedUser)> RequestUserPwd(Command receivedCmd)
+    private async Task<(Command cmdToSend, User? requestedUser)> GetUserPwd(Command receivedCmd)
     {
         Command cmdToSend = new();
 
@@ -256,7 +271,7 @@ class ClientHandler
         }
         else
         {
-            User? updatedUser = new(oldUser)
+            User updatedUser = new(oldUser)
             {
                 Nickname = receivedCmd.Payload
             };
@@ -266,7 +281,7 @@ class ClientHandler
             if(success)
             {
                 cmdToSend.Set(receivedCmd.CommandType, null);
-                LogManager.AddLog($"{endPoint} updated '{oldUser}': New nickname ('{oldUser.Nickname}' -> '{updatedUser.Nickname}')");
+                LogManager.AddLog($"{endPoint} updated '{updatedUser}': New nickname ('{oldUser.Nickname}' -> '{updatedUser.Nickname}')");
                 return (cmdToSend, updatedUser);
             }
             else
@@ -289,7 +304,7 @@ class ClientHandler
         }
         else
         {
-            User? updatedUser = new(oldUser)
+            User updatedUser = new(oldUser)
             {
                 PwdSet = PasswordSet.Deserialize(receivedCmd.Payload)
             };
@@ -299,7 +314,7 @@ class ClientHandler
             if(success)
             {
                 cmdToSend.Set(receivedCmd.CommandType, null);
-                LogManager.AddLog($"{endPoint} updated '{oldUser}': New password");
+                LogManager.AddLog($"{endPoint} updated '{updatedUser}': New password");
                 return (cmdToSend, updatedUser);
             }
             else
@@ -310,7 +325,86 @@ class ClientHandler
         }
     }
 
-    private async Task<Command> RequestCreatedGroups(Command receivedCmd)
+    private async Task<Command> GetUserList(Command receivedCmd)
+    {
+        Command cmdToSend = new();
+
+        (List<User>? users, string errorMessage) = await DbHelper.GetAllUser(false);
+
+        if(users != null)
+        {
+            cmdToSend.Set(receivedCmd.CommandType, JsonSerializer.Serialize(users));
+            return cmdToSend;
+        }
+        else 
+            Helper.DBErrorHandler(errorMessage, endPoint, "request user list", ref cmdToSend);
+
+        return cmdToSend;
+    }
+
+    private async Task<(Command, User?)> SetPartner(Command receivedCmd, User? mainUser)
+    {
+        Command cmdToSend = new();
+        User? partner = null;
+
+        if(mainUser == null || mainUser.UID == -1)
+        {
+            cmdToSend.SetError("Invalid main user data");
+            return (cmdToSend, partner);
+        }
+
+        int partnerID = Convert.ToInt32(receivedCmd.Payload);
+
+        (partner, string errorMessage) = await DbHelper.GetUser(partnerID, false);
+
+        if(partner == null)
+        {
+            Helper.DBErrorHandler(errorMessage, endPoint, "set partner", ref cmdToSend);
+        }
+        else
+        {
+            Server.JoinPrivate(this, mainUser.UID, partnerID);
+            cmdToSend.Set(receivedCmd.CommandType, User.Serialize(partner));
+        }
+
+        return (cmdToSend, partner);
+    }
+
+    private async Task<Command> GetPartnerHistory(Command receivedCmd, User? mainUser, User? partner)
+    {
+        Command cmdToSend = new();
+
+        if(mainUser == null || partner == null)
+        {
+            cmdToSend.SetError("Invalid user data");
+            return cmdToSend;
+        }
+
+        (List<Message>? messages, string errorMessage) = await DbHelper.GetPrivateMessageHistory(mainUser.UID, partner.UID);
+
+        if (messages != null)
+        {
+            cmdToSend.Set(receivedCmd.CommandType, JsonSerializer.Serialize(messages));
+        }
+        else
+        {
+            Helper.DBErrorHandler(errorMessage, endPoint, $"request '{mainUser.UID}' & '{partner.UID}' history", ref cmdToSend);
+        }
+
+        return cmdToSend;
+    }
+
+    private Command RemovePartner(Command receivedCmd)
+    {
+        Command cmdToSend = new(receivedCmd.CommandType, null);
+
+        groupHandler?.RemoveClient(this);
+        groupHandler = null;
+
+        return cmdToSend;
+    }
+
+    private async Task<Command> GetCreatedGroups(Command receivedCmd)
     {
         Command cmdToSend = new();
 
@@ -344,7 +438,7 @@ class ClientHandler
         if(success)
         {
             cmdToSend.Set(receivedCmd.CommandType, null);
-            LogManager.AddLog($"{endPoint} created chat group '{chatGroup.ToString(false)}'");
+            LogManager.AddLog($"{endPoint} created chat group with name '{chatGroup.GroupName}'");
         }
         else 
             Helper.DBErrorHandler(errorMessage, endPoint, "create chat group", ref cmdToSend);
@@ -369,6 +463,7 @@ class ClientHandler
 
         if(success)
         {
+            Server.DisposeChatGroup(groupID);
             cmdToSend.Set(receivedCmd.CommandType, null);
             LogManager.AddLog($"{endPoint} deleted chat group {groupToDel.ToString(false)}");
         }
@@ -378,7 +473,7 @@ class ClientHandler
         return cmdToSend;
     }
 
-    private async Task<Command> RequestAllGroupList(Command receivedCmd)
+    private async Task<Command> GetAllGroupList(Command receivedCmd)
     {
         Command cmdToSend = new();
 
@@ -404,11 +499,8 @@ class ClientHandler
 
         if (groupToJoin != null)
         {
-            cmdToSend.Set(receivedCmd.CommandType, ChatGroup.Serialize(groupToJoin));
-
             Server.JoinChatGroup(groupToJoin, this);
-
-            return cmdToSend;
+            cmdToSend.Set(receivedCmd.CommandType, ChatGroup.Serialize(groupToJoin));
         }
         else
         {

@@ -44,7 +44,7 @@ class ChatGroupHandler
             if(chatGroup != null)
             {
                 chatGroup.OnlineCount = connectedClients.Count;
-                Task.WhenAny(DbHelper.UpdateChatGroup(chatGroup));
+                Task.WhenAny(DbHelper.UpdateChatGroup(chatGroup, true));
                 LogManager.AddLog($"{client.EndPoint} connected to group '{chatGroup.ToString(false)}'");
             }
             else if(memberIDs != null)
@@ -63,7 +63,7 @@ class ChatGroupHandler
             if(chatGroup != null)
             {
                 chatGroup.OnlineCount = connectedClients.Count;
-                Task.WhenAny(DbHelper.UpdateChatGroup(chatGroup));
+                Task.WhenAny(DbHelper.UpdateChatGroup(chatGroup, true));
                 LogManager.AddLog($"{client.EndPoint} disconnected from group '{chatGroup.ToString(false)}'");
             }
             else if(memberIDs != null)
@@ -77,5 +77,23 @@ class ChatGroupHandler
                 LogManager.AddLog($"Handler of group '{chatGroup?.ToString(false) ?? memberIDs!.ToString()}' auto-disposed");
             }
         }
+    }
+
+    public void Dispose()
+    {
+        lock(connectedClients)
+        {
+            connectedClients.ForEach(client => client.SetUpGroupHandler(null));
+            connectedClients.Clear();
+        }
+
+        if(chatGroup != null)
+        {
+            chatGroup.OnlineCount = 0;
+            Task.WhenAny(DbHelper.UpdateChatGroup(chatGroup, true));
+        }
+
+        disposeAction(this);
+        LogManager.AddLog($"Handler of group '{chatGroup?.ToString(false) ?? memberIDs!.ToString()}' got disposed");
     }
 }
