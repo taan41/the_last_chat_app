@@ -554,6 +554,14 @@ static class ClientHelper
             WritePromt(prompt);
         }
 
+        public static void WriteNotice(string content, string prompt)
+        {
+            IOHelper.MoveCursor(- prompt.Length - inputBuffer.Length - WindowWidth);
+            WriteLine(new string(' ', WindowWidth - 1));
+            WriteLine(content.ToString().PadRight(WindowWidth - 1));
+            WritePromt(prompt);
+        }
+
         public static void StartChatting(NetworkStream stream, User mainUser, User? partner, ChatGroup? joinedGroup)
         {
             if(mainUser.UID == -1 || (joinedGroup == null && partner == null))
@@ -607,14 +615,13 @@ static class ClientHelper
 
                 if (content.Trim().ElementAt(0) == '/')
                 {
-                    switch(content.Trim())
+                    switch(content.Split(' ').ElementAt(0))
                     {
                         case "/help":
                             IOHelper.MoveCursor(- prompt.Length - inputBuffer.Length - WindowWidth);
                             WriteLine(new string(' ', WindowWidth - 1));
                             WriteLine("[Client] All chat commands:");
                             ShowMenu.ChatCommands();
-                            WriteLine();
                             WritePromt(prompt);
                             continue;
 
@@ -626,13 +633,9 @@ static class ClientHelper
                             }
                             else if (partner != null)
                             {
-                                WriteMessage($"[Client] Partner's info: '{partner.ToString(false)}'", prompt);
-                                continue;
+                                WriteNotice($"\n[Client] Partner's info: '{partner.ToString(false)}'", prompt);
                             }
-                            else
-                            {
-                                continue;
-                            }
+                            continue;
 
                         case "/clear": case "/cls":
                             Clear();
@@ -650,7 +653,7 @@ static class ClientHelper
                             return;
                         
                         default:
-                            WriteMessage("[Client] Unknown chat command", prompt);
+                            WriteNotice("[Client] Unknown chat command", prompt);
                             continue;
                     }
                 }
@@ -700,7 +703,7 @@ static class ClientHelper
                             Message? echoMsg = Message.Deserialize(receivedCmd.Payload);
 
                             if (echoMsg == null)
-                                WriteMessage("[Client] Error: Null echo message", prompt);
+                                WriteNotice("[Client] Error: Null echo message", prompt);
                             else
                             {
                                 WriteMessage(echoMsg.ToString(), prompt);
@@ -711,15 +714,15 @@ static class ClientHelper
 
                         case CommandType.GetGroupInfo:
                             ChatGroup? requestedGroup = ChatGroup.Deserialize(receivedCmd.Payload);
-                            WriteMessage($"[Client] Group info: '{requestedGroup?.ToString(true)}'", prompt);
+                            WriteNotice($"[Client] Group info: '{requestedGroup?.ToString(true)}'", prompt);
                             continue;
 
                         case CommandType.Error:
-                            WriteMessage($"[Client] Error while echoing: {receivedCmd.Payload}", prompt);
+                            WriteNotice($"[Client] Error while echoing: {receivedCmd.Payload}", prompt);
                             return;
 
                         default:
-                            WriteMessage($"[Client] Error while echoing: Received invalid command {receivedCmd?.CommandType}", prompt);
+                            WriteNotice($"[Client] Error while echoing: Received invalid command {receivedCmd?.CommandType}", prompt);
                             return;
                     }
                 }
@@ -728,7 +731,7 @@ static class ClientHelper
             catch(IOException) {}
             catch(Exception ex)
             {
-                WriteLine($" Error while echoing msg: ({ex.GetType().Name}) {ex.Message}");
+                WriteNotice($" Error while echoing msg: ({ex.GetType().Name}) {ex.Message}", prompt);
                 // WriteLine(ex);
                 ReadKey(true);
             }
@@ -855,11 +858,12 @@ static class ClientHelper
     
         public static void ChatCommands()
         {
-            WriteLine(" /help         -- Show all chat commands");
-            WriteLine(" /info         -- Show info of current chat room");
-            WriteLine(" /clear /cls   -- Clear console");
-            WriteLine(" /reload       -- Clear console then re-write all messages");
-            WriteLine(" /leave        -- Leave chat room");
+            WriteLine(" /help             -- Show all chat commands");
+            WriteLine(" /info             -- Show info of current chat room");
+            WriteLine(" /clear /cls       -- Clear console");
+            WriteLine(" /reload           -- Clear console then re-write all messages");
+            WriteLine(" /file (filePath)  -- Send file to all connected users");
+            WriteLine(" /leave            -- Leave chat room");
             WriteLine(" You can also leave using 'ESC' key");
         }
     }

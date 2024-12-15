@@ -36,9 +36,12 @@ class Command
 
     public void SetError(string? payload)
         => Set(CommandType.Error, payload);
+
+    public string Name()
+        => CommandType.ToString();
     
-    public static string Serialize(Command command) =>
-        JsonSerializer.Serialize(command);
+    public string Serialize()
+        => JsonSerializer.Serialize(this);
 
     public static Command? Deserialize(string data) =>
         JsonSerializer.Deserialize<Command>(data);

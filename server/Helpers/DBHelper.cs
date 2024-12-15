@@ -1,4 +1,6 @@
 using System.Data;
+using System.Net;
+using System.Text;
 using MySql.Data.MySqlClient;
 
 static class DbHelper
@@ -285,23 +287,44 @@ static class DbHelper
         }
     }
 
-    public static async Task<(bool success, string errorMessage)> UpdateUser(User updatedUser)
+    public static async Task<(bool success, string errorMessage)> UpdateUser(User userToUpdate, string? newNickname, PasswordSet? newPwd)
     {
-        if (updatedUser.UID == -1 || updatedUser.PwdSet == null)
+        if (newNickname == null && newPwd == null)
+            return (false, "Invalid updated data");
+            
+        if (userToUpdate.UID == -1 || userToUpdate.PwdSet == null)
             return (false, "Null UID/Password Set");
 
-        string query = "UPDATE Users SET Nickname = @newNickname, PasswordHash = @newPwdHash, Salt = @newSalt WHERE UserID = @userID";
+        StringBuilder query = new("UPDATE Users SET");
+
+        if (newNickname != null)
+            query.Append(" Nickname = @newNickname");
+
+        if (newPwd != null)
+        {
+            if (newNickname != null)
+                query.Append(',');
+            query.Append(" PasswordHash = @newPwdHash, Salt = @newSalt");
+        }
+
+        query.Append(" WHERE UserID = @userID");
 
         try
         {
             using MySqlConnection conn = new(connectionString);
             await conn.OpenAsync();
 
-            using MySqlCommand cmd = new(query, conn);
-            cmd.Parameters.AddWithValue("@newNickname", updatedUser.Nickname);
-            cmd.Parameters.AddWithValue("@newPwdHash", updatedUser.PwdSet.PwdHash);
-            cmd.Parameters.AddWithValue("@newSalt", updatedUser.PwdSet.Salt);
-            cmd.Parameters.AddWithValue("@userID", updatedUser.UID);
+            using MySqlCommand cmd = new(query.ToString(), conn);
+            cmd.Parameters.AddWithValue("@userID", userToUpdate.UID);
+
+            if (newNickname != null)
+                cmd.Parameters.AddWithValue("@newNickname", newNickname);
+
+            if (newPwd != null)
+            {
+                cmd.Parameters.AddWithValue("@newPwdHash", newPwd.PwdHash);
+                cmd.Parameters.AddWithValue("@newSalt", newPwd.Salt);
+            }
 
             await cmd.ExecuteNonQueryAsync();
 
@@ -594,9 +617,9 @@ static class DbHelper
         }
     }
 
-    public static async Task<(bool success, string errorMessage)> AddLog(string logContent)
+    public static async Task<(bool success, string errorMessage)> AddLog(string? source, string logContent)
     {
-        string query = "INSERT INTO ActivityLog (Content) VALUES (@content)";
+        string query = "INSERT INTO ActivityLog (Source, Content) VALUES (@source, @content)";
 
         try
         {    
@@ -604,6 +627,7 @@ static class DbHelper
             await conn.OpenAsync();
 
             using MySqlCommand cmd = new(query, conn);
+            cmd.Parameters.AddWithValue("@source", source ?? "null");
             cmd.Parameters.AddWithValue("@content", logContent);
 
             await cmd.ExecuteNonQueryAsync();
@@ -631,7 +655,7 @@ static class DbHelper
             using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
-                logList.Add(new(reader.GetDateTime("LogTime"), reader.GetString("Content")));
+                logList.Add(new(reader.GetDateTime("LogTime"), reader.GetString("Source"), reader.GetString("Content")));
             }
 
             return (logList, "");

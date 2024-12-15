@@ -1,3 +1,4 @@
+using System.Security.Policy;
 using System.Text.Json;
 
 [Serializable]
@@ -23,10 +24,20 @@ class User
 
     public string ToString(bool showUsername)
         => showUsername ? ToString() : $"[ID: {UID}] Nickname: {Nickname}";
-    
-    public static string Serialize(User user) =>
-        JsonSerializer.Serialize(user);
 
-    public static User? Deserialize(string data) =>
-        JsonSerializer.Deserialize<User>(data);
+    public override bool Equals(object? obj)
+    {
+        if(obj is User other)
+            return UID == other.UID && Username == other.Username;
+        return false;
+    }
+
+    public override int GetHashCode()
+        => HashCode.Combine(UID, Username);
+
+    public string Serialize()
+        => JsonSerializer.Serialize(this);
+
+    public static User? Deserialize(string data)
+        => JsonSerializer.Deserialize<User>(data);
 }

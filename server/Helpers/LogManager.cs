@@ -1,51 +1,56 @@
-class Log(DateTime? _time, string _content)
+using System.Runtime.CompilerServices;
+
+class Log(DateTime? _time, string _source, string _content)
 {
     private readonly DateTime time = _time ?? DateTime.Now;
+    private readonly string source = _source;
     private readonly string content = _content;
 
     public override string ToString()
-        => $"[{time}] {content}";
+        => $"[{time}] ({source}) {content}";
 }
 
 static class LogManager
 {
-    private static readonly SemaphoreSlim logSemaphore = new(0);
     private static List<Log> logList = [];
     private static bool initailized = false, inLogView = false;
 
     public static async void Initialize()
     {
-        (List<Log>? oldLog, string errorMessage) = await DbHelper.GetLogHistory();
+        var (oldLog, errorMessage) = await DbHelper.GetLogHistory();
 
         if(oldLog == null)
-            Console.WriteLine($" DB error trying to retrieve log: {errorMessage}");
-        else if(oldLog.Count > 0)
-            logList = oldLog;
-
+        {
+            Console.WriteLine($" LogManager error: {errorMessage}");
+            return;
+        }
+        
+        logList = oldLog;
         initailized = true;
     }
 
-    public static async void AddLog(string logContent)
+    public static void AddLog(string logContent, object? sourceObj, [CallerMemberName] string sourceMethod = "unknown method")
+        => AddLog(logContent, sourceObj?.ToString() ?? sourceMethod);
+
+    public static async void AddLog(string logContent, [CallerMemberName] string? sourceMethod = null)
     {
         if(!initailized)
             return;
 
-        (bool success, string errorMessage) = await DbHelper.AddLog(logContent);
+        var (success, errorMessage) = await DbHelper.AddLog(sourceMethod ?? "null", logContent);
 
         if(success)
         {
-            Log newLog = new(null, logContent);
-
             lock(logList)
             {
-                logList.Add(newLog);
+                logList.Add(new(null, sourceMethod ?? "null", logContent));
                 
                 if(inLogView)
-                    Console.WriteLine(newLog.ToString());
+                    Console.WriteLine(logList.Last());
             }
         }
         else
-            Console.WriteLine($" DB error trying to add new log: {errorMessage}");
+            Console.WriteLine($" LogManager error: {errorMessage}");
     }
 
     public static async void ClearLog()
@@ -56,12 +61,12 @@ static class LogManager
         lock(logList)
             logList.Clear();
 
-        (bool success, string errorMessage) = await DbHelper.ClearLog();
+        var (success, errorMessage) = await DbHelper.ClearLog();
 
         if(!success)
         {
-            Console.WriteLine($" DB error trying to clear log: {errorMessage}");
-            AddLog($"DB error trying to clear log: {errorMessage}");
+            Console.WriteLine($" LogManager error: {errorMessage}");
+            AddLog(errorMessage);
         }
     }
 

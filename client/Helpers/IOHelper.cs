@@ -86,6 +86,10 @@ static class IOHelper
     {
         bool done = false;
         int index = 0, startCursorLeft = CursorLeft;
+        CancelKeyPress += (sender, eventArgs) => {
+            TextCopy.ClipboardService.SetText(sb.ToString());
+            eventArgs.Cancel = true;
+        };
 
         while(!done)
         {
@@ -110,6 +114,12 @@ static class IOHelper
                         goto case ConsoleKey.Backspace;
                     else
                         goto default;
+
+                case ConsoleKey.V:
+                    if((key.Modifiers & ConsoleModifiers.Control) != 0)
+                        HandlePaste(sb, ref index);
+                    else goto default;
+                    break;
 
                 case ConsoleKey.LeftArrow:
                     if(index > 0)
@@ -195,9 +205,17 @@ static class IOHelper
         }
 
         (int oldLeft, int oldTop) = GetCursorPosition();
-        Write(sb.ToString()[index..]);
+        Write(sb.ToString()[index ..]);
         Write(new string(' ', removedLength));
         SetCursorPosition(oldLeft, oldTop);
+    }
+
+    private static void HandlePaste(StringBuilder sb, ref int index)
+    {
+        sb.Insert(index, TextCopy.ClipboardService.GetText());
+
+        Write(sb.ToString()[index ..]);
+        MoveCursor(index - sb.Length);
     }
 
     private static void HandleDefaultKey(StringBuilder sb, ref int index, char keyChar, int startCursorLeft, bool intercept)

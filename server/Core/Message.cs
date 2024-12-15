@@ -34,8 +34,8 @@ class Message
     public override string ToString()
         => $"[{Timestamp:dd/MM HH:mm}] {Nickname}: {Content}";
     
-    public static string Serialize(Message pwdSet) =>
-        JsonSerializer.Serialize(pwdSet);
+    public string Serialize()
+        => JsonSerializer.Serialize(this);
 
     public static Message? Deserialize(string data) =>
         JsonSerializer.Deserialize<Message>(data);

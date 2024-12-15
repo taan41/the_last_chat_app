@@ -22,9 +22,9 @@ class Command
 
     public Command() {}
 
-    public Command(CommandType commandType, string? payload)
+    public Command(CommandType cmdType, string? payload)
     {
-        CommandType = commandType;
+        CommandType = cmdType;
         Payload = payload ?? "";
     }
 

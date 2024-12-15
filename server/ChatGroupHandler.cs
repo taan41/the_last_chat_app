@@ -4,6 +4,7 @@ class ChatGroupHandler
     private readonly List<int>? memberIDs;
     private readonly List<ClientHandler> connectedClients = [];
     private readonly Action<ChatGroupHandler> disposeAction;
+    private readonly CancellationTokenSource disposeTokenSource = new();
 
     public ChatGroup? GetGroup => chatGroup;
     public List<int>? GetMemIDs => memberIDs;
@@ -24,62 +25,61 @@ class ChatGroupHandler
         AddClient(client);
     }
 
-    public async Task EchoMessage(Message message, ClientHandler sourceClient)
+    public async void EchoMessage(Message message, ClientHandler sourceClient)
     {
         await DbHelper.SaveMessage(message);
-
-        foreach (ClientHandler client in connectedClients)
-            if(client != sourceClient)
-                await client.EchoMessage(message);
+        EchoCmd(new(CommandType.Message, message.Serialize()), sourceClient);
     }
 
-    public void AddClient(ClientHandler client)
+    public void EchoCmd(Command cmd, ClientHandler sourceClient)
+    {
+        foreach (ClientHandler client in connectedClients)
+            if(client != sourceClient)
+                client.EchoCmd(cmd, disposeTokenSource.Token);
+    }
+
+    public async void AddClient(ClientHandler client)
     {
         client.SetUpGroupHandler(this);
         
         lock(connectedClients)
         {
             connectedClients.Add(client);
-
-            if(chatGroup != null)
-            {
-                chatGroup.OnlineCount = connectedClients.Count;
-                Task.WhenAny(DbHelper.UpdateChatGroup(chatGroup, true));
-                LogManager.AddLog($"{client.EndPoint} connected to group '{chatGroup.ToString(false)}'");
-            }
-            else if(memberIDs != null)
-            {
-                LogManager.AddLog($"{client.EndPoint} connected to private chat of {memIDsToString()}");
-            }
         }
+
+        if(chatGroup != null)
+        {
+            chatGroup.OnlineCount = connectedClients.Count;
+            await DbHelper.UpdateChatGroup(chatGroup, true);
+        }
+        
+        LogManager.AddLog($"{client} connected", this);
     }
 
-    public void RemoveClient(ClientHandler client)
+    public async void RemoveClient(ClientHandler client)
     {
         lock(connectedClients)
         {
             connectedClients.Remove(client);
+        }
 
-            if(chatGroup != null)
-            {
-                chatGroup.OnlineCount = connectedClients.Count;
-                Task.WhenAny(DbHelper.UpdateChatGroup(chatGroup, true));
-                LogManager.AddLog($"{client.EndPoint} disconnected from group '{chatGroup.ToString(false)}'");
-            }
-            else if(memberIDs != null)
-            {
-                LogManager.AddLog($"{client.EndPoint} disconnected from private chat of {memIDsToString()}");
-            }
+        if(chatGroup != null)
+        {
+            chatGroup.OnlineCount = connectedClients.Count;
+            await DbHelper.UpdateChatGroup(chatGroup, true);
+        }
+        
+        LogManager.AddLog($"{client} disconnected", this);
 
-            if(connectedClients.Count == 0)
-            {
-                disposeAction(this);
-                LogManager.AddLog($"Handler of group '{chatGroup?.ToString(false) ?? memIDsToString()}' auto-disposed");
-            }
+        if(connectedClients.Count == 0)
+        {
+            disposeTokenSource.Cancel();
+            disposeAction(this);
+            LogManager.AddLog($"Auto-disposed", this);
         }
     }
 
-    public void Dispose()
+    public async void Dispose()
     {
         lock(connectedClients)
         {
@@ -90,13 +90,14 @@ class ChatGroupHandler
         if(chatGroup != null)
         {
             chatGroup.OnlineCount = 0;
-            Task.WhenAny(DbHelper.UpdateChatGroup(chatGroup, true));
+            await DbHelper.UpdateChatGroup(chatGroup, true);
         }
 
+        disposeTokenSource.Cancel();
         disposeAction(this);
-        LogManager.AddLog($"Handler of group '{chatGroup?.ToString(false) ?? memIDsToString()}' got disposed");
+        LogManager.AddLog($"Manually disposed", this);
     }
 
-    private string memIDsToString()
-        => $"'{memberIDs?[0]}' & '{memberIDs?[1]}'";
+    public override string ToString()
+        => chatGroup?.ToString(false) ?? $"User'{memberIDs?[0]}'&'{memberIDs?[1]}'";
 }

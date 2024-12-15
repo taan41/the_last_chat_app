@@ -181,7 +181,7 @@ class Server
         catch(OperationCanceledException) {}
         catch(Exception ex)
         {
-            LogManager.AddLog($"Error while accepting client: {ex.Message}");
+            LogManager.AddLog($"Error: {ex.Message}");
         }
     }
 
@@ -193,9 +193,6 @@ class Server
 
             switch(IOHelper.ReadInput(false))
             {
-                // WriteLine(" 1. View connected clients");
-                // WriteLine(" 2. Manage chat groups");
-                // WriteLine(" 3. Broadcast notice");
                 case "1":
                     ViewConnectedClients();
                     continue;
