@@ -91,6 +91,7 @@ static class DbHelper
             CREATE TABLE ActivityLog (
                 LogIndex INT AUTO_INCREMENT PRIMARY KEY,
                 LogTime TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                Source TEXT CHARACTER SET utf8mb4 NOT NULL,
                 Content TEXT CHARACTER SET utf8mb4 NOT NULL
             )", conn))
         {
@@ -641,7 +642,7 @@ static class DbHelper
     
     public static async Task<(List<Log>? requestedLogList, string errorMessage)> GetLogHistory()
     {
-        string query = "SELECT LogTime, Content FROM ActivityLog ORDER BY LogTime";
+        string query = "SELECT LogTime, Source, Content FROM ActivityLog ORDER BY LogTime";
 
         List<Log> logList = [];
         
