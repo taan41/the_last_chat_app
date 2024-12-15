@@ -19,8 +19,6 @@ class Message
         Content = content;
     }
 
-    // public Message(int senderID, int? receiverID, int? groupID, string nickname, string content) : this(DateTime.Now, nickname, content)
-
     public Message(User sender, User? receiver, ChatGroup? joinedGroup, string content)
     {
         if(receiver != null)
@@ -37,9 +35,9 @@ class Message
 
     public override string ToString()
         => $"[{Timestamp:dd/MM HH:mm}] {Nickname}: {Content}";
-    
-    public static string Serialize(Message pwdSet) =>
-        JsonSerializer.Serialize(pwdSet);
+
+    public string Serialize()
+        => JsonSerializer.Serialize(this);
 
     public static Message? Deserialize(string data) =>
         JsonSerializer.Deserialize<Message>(data);

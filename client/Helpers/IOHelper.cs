@@ -90,6 +90,7 @@ static class IOHelper
             TextCopy.ClipboardService.SetText(sb.ToString());
             eventArgs.Cancel = true;
         };
+        limit ??= MagicNum.inputLimit;
 
         while(!done)
         {
@@ -117,7 +118,7 @@ static class IOHelper
 
                 case ConsoleKey.V:
                     if((key.Modifiers & ConsoleModifiers.Control) != 0)
-                        HandlePaste(sb, ref index);
+                        HandlePaste(sb, ref index, (int) limit);
                     else goto default;
                     break;
 
@@ -164,7 +165,7 @@ static class IOHelper
                     break;
 
                 default:
-                    if((startCursorLeft + index + 1) / WindowWidth < WindowHeight && sb.Length < (limit ?? MagicNum.inputLimit))
+                    if((startCursorLeft + index + 1) / WindowWidth < WindowHeight && sb.Length < limit)
                         HandleDefaultKey(sb, ref index, key.KeyChar, startCursorLeft, intercept);
                     break;
             }
@@ -210,9 +211,10 @@ static class IOHelper
         SetCursorPosition(oldLeft, oldTop);
     }
 
-    private static void HandlePaste(StringBuilder sb, ref int index)
+    private static void HandlePaste(StringBuilder sb, ref int index, int limit)
     {
-        sb.Insert(index, TextCopy.ClipboardService.GetText());
+        string? copiedText = TextCopy.ClipboardService.GetText();
+        sb.Insert(index, copiedText?[.. Math.Min(copiedText.Length, limit - sb.Length)]);
 
         Write(sb.ToString()[index ..]);
         MoveCursor(index - sb.Length);

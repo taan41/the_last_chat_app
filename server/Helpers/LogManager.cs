@@ -7,7 +7,7 @@ class Log(DateTime? _time, string _source, string _content)
     private readonly string content = _content;
 
     public override string ToString()
-        => $"[{time}] ({source}) {content}";
+        => $"[{time:dd/MM/yy HH:mm:ss}] ({source}) {content}";
 }
 
 static class LogManager

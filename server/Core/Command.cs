@@ -10,7 +10,7 @@ enum CommandType
     GetCreatedGroups, CreateGroup, DeleteGroup,
     GetGroupList, GetGroupInfo, GetGroupHistory, 
     JoinGroup, LeaveGroup,
-    Message, MessageEcho,
+    Message, EchoMessage, SendFile,
     Disconnect
 }
 
@@ -22,9 +22,9 @@ class Command
 
     public Command() {}
 
-    public Command(CommandType commandType, string? payload)
+    public Command(CommandType cmdType, string? payload)
     {
-        CommandType = commandType;
+        CommandType = cmdType;
         Payload = payload ?? "";
     }
 

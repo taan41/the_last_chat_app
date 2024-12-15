@@ -10,7 +10,7 @@ enum CommandType
     GetCreatedGroups, CreateGroup, DeleteGroup,
     GetGroupList, GetGroupInfo, GetGroupHistory, 
     JoinGroup, LeaveGroup,
-    Message, MessageEcho,
+    Message, EchoMessage, SendFile,
     Disconnect
 }
 
@@ -36,9 +36,12 @@ class Command
 
     public void SetError(string? payload)
         => Set(CommandType.Error, payload);
-    
-    public static string Serialize(Command command) =>
-        JsonSerializer.Serialize(command);
+
+    public string Name()
+        => CommandType.ToString();
+
+    public string Serialize()
+        => JsonSerializer.Serialize(this);
 
     public static Command? Deserialize(string data) =>
         JsonSerializer.Deserialize<Command>(data);

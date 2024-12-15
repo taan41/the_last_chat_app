@@ -175,6 +175,9 @@ class Client
                     GroupMsgMenu(stream, ref loggedInUser);
                     continue;
 
+                case "5":
+                    continue;
+
                 case "0": case null:
                     WriteLine(" Logging out...");
                     cmdToSend.Set(CommandType.Logout, null);

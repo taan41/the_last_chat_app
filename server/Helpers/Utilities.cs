@@ -16,11 +16,11 @@ class MagicNumbers
 class Utilities
 {
     // UTF-16 encoding methods
-    public static string DecodeBytes(byte[] data) => Encoding.Unicode.GetString(data);
+    public static string DecodeBytes(byte[] data) => Encoding.UTF8.GetString(data);
 
-    public static string DecodeBytes(byte[] data, int index, int length) => Encoding.Unicode.GetString(data, index, length);
+    public static string DecodeBytes(byte[] data, int index, int length) => Encoding.UTF8.GetString(data, index, length);
 
-    public static byte[] EncodeString(string content) => Encoding.Unicode.GetBytes(content);
+    public static byte[] EncodeString(string content) => Encoding.UTF8.GetBytes(content);
 
     // Hash & verify password
     public static (byte[] PwdHash, byte[] Salt) HashPassword(string pwd)

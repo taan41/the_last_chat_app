@@ -19,16 +19,18 @@ class Message
         Content = content;
     }
 
-    public Message(int senderID, int? receiverID, int? groupID, string nickname, string content) : this(DateTime.Now, nickname, content)
+    public Message(User sender, User? receiver, ChatGroup? joinedGroup, string content)
     {
-        SenderID = senderID;
-
-        if(receiverID.HasValue)
-            ReceiverID = receiverID;
-        else if(groupID.HasValue)
-            GroupID = groupID;
+        if(receiver != null)
+            ReceiverID = receiver.UID;
+        else if(joinedGroup != null)
+            GroupID = joinedGroup.GroupID;
         else
             throw new ArgumentException("Both ReceiverID and GroupID can't be null");
+        
+        SenderID = sender.UID;
+        Nickname = sender.Nickname;
+        Content = content;
     }
 
     public override string ToString()

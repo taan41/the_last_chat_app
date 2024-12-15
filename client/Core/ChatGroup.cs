@@ -23,8 +23,8 @@ class ChatGroup
     public string ToString(bool showOnline)
         => showOnline ? ToString() : $"[ID: {GroupID:D3}] {GroupName}";
 
-    public static string Serialize(ChatGroup group) =>
-        JsonSerializer.Serialize(group);
+    public string Serialize()
+        => JsonSerializer.Serialize(this);
 
     public static ChatGroup? Deserialize(string data) =>
         JsonSerializer.Deserialize<ChatGroup>(data);

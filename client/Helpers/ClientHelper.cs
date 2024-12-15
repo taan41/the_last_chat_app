@@ -168,7 +168,7 @@ static class ClientHelper
                         PwdSet = HashPassword(pwd.ToString())
                     };
 
-                cmdToSend.Set(CommandType.Register, User.Serialize(registeredUser));
+                cmdToSend.Set(CommandType.Register, registeredUser.Serialize());
                 if (CommandHandler.SendAndHandle(stream, ref buffer, cmdToSend, out _))
                 {
                     IOHelper.WriteBorder();
@@ -286,7 +286,7 @@ static class ClientHelper
 
                 PasswordSet newPwdSet = HashPassword(newPwd.ToString());
 
-                if (CommandHandler.SendAndHandle(stream, ref buffer, new(CommandType.ChangePassword, PasswordSet.Serialize(newPwdSet)), out _))
+                if (CommandHandler.SendAndHandle(stream, ref buffer, new(CommandType.ChangePassword, newPwdSet.Serialize()), out _))
                 {
                     user.PwdSet = newPwdSet;
                     IOHelper.WriteBorder();
@@ -324,7 +324,7 @@ static class ClientHelper
                     GroupName = groupName
                 };
 
-                if (CommandHandler.SendAndHandle(stream, ref buffer, new(CommandType.CreateGroup, ChatGroup.Serialize(newGroup)), out _))
+                if (CommandHandler.SendAndHandle(stream, ref buffer, new(CommandType.CreateGroup, newGroup.Serialize()), out _))
                 {
                     IOHelper.WriteBorder();
                     WriteLine(" Created chat group successfully!");
@@ -493,7 +493,7 @@ static class ClientHelper
             }
         }
 
-        private static readonly StringBuilder inputBuffer = new();
+        private static readonly StringBuilder inputBuffer = new(MagicNum.inputLimit);
         private static readonly List<Message> msgHistory = [];
 
         public static bool GetPartnerHistory(NetworkStream stream)
@@ -591,7 +591,6 @@ static class ClientHelper
             Command cmdToSend = new();
 
             CancellationTokenSource stopTokenSource = new();
-            
 
             Task echoMsg = Task.Run(() => EchoMessage(stream, prompt, stopTokenSource.Token));
             
@@ -660,13 +659,13 @@ static class ClientHelper
                 else
                 {
                     Message message = new(mainUser, partner, joinedGroup, content);
-                    cmdToSend.Set(CommandType.Message, Message.Serialize(message));
+                    cmdToSend.Set(CommandType.Message, message.Serialize());
                     WriteMessage(message.ToString(), prompt);
                     lock (msgHistory)
                         msgHistory.Add(message);
                 }
 
-                stream.Write(EncodeString(Command.Serialize(cmdToSend)));
+                stream.Write(EncodeString(cmdToSend.Serialize()));
             }
         }
 
@@ -699,7 +698,7 @@ static class ClientHelper
 
                     switch(receivedCmd?.CommandType)
                     {
-                        case CommandType.MessageEcho:
+                        case CommandType.EchoMessage:
                             Message? echoMsg = Message.Deserialize(receivedCmd.Payload);
 
                             if (echoMsg == null)
@@ -777,6 +776,7 @@ static class ClientHelper
             WriteLine(" 2. Change password");
             WriteLine(" 3. Private message");
             WriteLine(" 4. Group message");
+            WriteLine(" 5. Set download folder");
             WriteLine(" 0. Logout");
             IOHelper.WriteBorder();
             Write(" Enter Choice: ");
@@ -950,7 +950,7 @@ static class ClientHelper
             int bytesRead, totalRead = 0;
             lock(stream)
             {
-                stream.Write(EncodeString(Command.Serialize(cmdToSend)));
+                stream.Write(EncodeString(cmdToSend.Serialize()));
 
                 while(true)
                 {
@@ -993,23 +993,10 @@ static class ClientHelper
             }
         }
 
-        // public static bool Ping(NetworkStream stream, byte[] buffer)
-        // {
-        //     try
-        //     {
-        //         stream.Write(EncodeString(Command.Serialize(new(CommandType.Ping, null))));
-        //         lock(buffer)
-        //         return stream.Read(buffer, 0, buffer.Length) > 0;
-        //     }
-        //     catch(Exception)
-        //     {
-        //         return false;
-        //     }
-        // }
-
         public static void SendDisconnect(NetworkStream stream)
         {
-            stream.Write(EncodeString(Command.Serialize(new(CommandType.Disconnect, null))));
+            Command disconnect = new(CommandType.Disconnect, null);
+            stream.Write(EncodeString(disconnect.Serialize()));
         }
     }
 }

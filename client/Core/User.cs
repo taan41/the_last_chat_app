@@ -23,9 +23,9 @@ class User
 
     public string ToString(bool showUsername)
         => showUsername ? ToString() : $"[ID: {UID}] Nickname: {Nickname}";
-    
-    public static string Serialize(User user) =>
-        JsonSerializer.Serialize(user);
+
+    public string Serialize()
+        => JsonSerializer.Serialize(this);
 
     public static User? Deserialize(string data) =>
         JsonSerializer.Deserialize<User>(data);
