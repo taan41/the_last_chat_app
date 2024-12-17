@@ -952,10 +952,8 @@ static class ClientHelper
             {
                 stream.Write(EncodeString(cmdToSend.Serialize()));
 
-                while(true)
+                while((bytesRead = stream.Read(buffer, totalRead, 1024)) > 0)
                 {
-                    bytesRead = stream.Read(buffer, totalRead, 1024);
-
                     totalRead += bytesRead;
                     
                     if(bytesRead < 1024)

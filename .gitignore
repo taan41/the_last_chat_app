@@ -1,5 +1,7 @@
 /test
 /test2
+/testFileSender
+/testFileReceiver
 /server/bin
 /server/obj
 /client/bin
