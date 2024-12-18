@@ -7,7 +7,7 @@ class PrivateChatHandler(ClientHandler client, int user1ID, int user2ID, Action<
     public override async void EchoMessage(Message message, ClientHandler sourceClient)
     {
         await DBHelper.MessageDB.AddPrivate(message, connectedClients.Count == 2);
-        EchoCmd(new(CommandType.Message, message.Serialize()), sourceClient);
+        EchoCmd(new(CommandType.EchoMessage, message.Serialize()), sourceClient);
     }
 
     public override void EchoCmd(Command cmd, ClientHandler sourceClient)
@@ -33,5 +33,5 @@ class PrivateChatHandler(ClientHandler client, int user1ID, int user2ID, Action<
     }
 
     public override string ToString()
-        => $"'Private({members[0]}-{members[1]})'";
+        => $"Private({members[0]}-{members[1]})";
 }

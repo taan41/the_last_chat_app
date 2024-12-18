@@ -1,6 +1,7 @@
 using System.Data;
 using System.Text;
 using MySql.Data.MySqlClient;
+using Org.BouncyCastle.Asn1.Cmp;
 using Org.BouncyCastle.Asn1.Cms;
 
 static class DBHelper
@@ -188,7 +189,7 @@ static class DBHelper
 
         public static async Task<(bool success, string errorMessage)> Add(User userToAdd)
         {
-            string query = "INSERT INTO Users (Username, Nickname, PasswordHash, Salt) VALUES (@username, @nickname, @pwdHash, @salt)";
+            string query = "INSERT INTO Users (Username, Nickname, PasswordHash, Salt, OnlineStatus) VALUES (@username, @nickname, @pwdHash, @salt, @onlineStatus)";
 
             if (userToAdd.PwdSet == null)
                 return (false, "Null user password");
@@ -203,6 +204,7 @@ static class DBHelper
                 cmd.Parameters.AddWithValue("@nickname", userToAdd.Nickname);
                 cmd.Parameters.AddWithValue("@pwdHash", userToAdd.PwdSet.PwdHash);
                 cmd.Parameters.AddWithValue("@salt", userToAdd.PwdSet.Salt);
+                cmd.Parameters.AddWithValue("@onlineStatus", userToAdd.OnlineStatus);
 
                 await cmd.ExecuteNonQueryAsync();
 
@@ -216,7 +218,7 @@ static class DBHelper
 
         public static async Task<(User? requestedUser, string errorMessage)> Get(string username, bool getPwd)
         {
-            string query = "SELECT UserID, Username, Nickname, PasswordHash, Salt FROM Users WHERE Username=@username";
+            string query = "SELECT UserID, Username, Nickname, PasswordHash, Salt, OnlineStatus FROM Users WHERE Username = @username";
 
             try
             {
@@ -249,6 +251,7 @@ static class DBHelper
                     UserID = reader.GetInt32("UserID"),
                     Username = reader.GetString("Username"),
                     Nickname = reader.GetString("Nickname"),
+                    OnlineStatus = reader.GetBoolean("OnlineStatus"),
                     PwdSet = pwdSet
                 }, "");
             }
@@ -260,7 +263,9 @@ static class DBHelper
         
         public static async Task<(User? requestedUser, string errorMessage)> Get(int userID, bool getPwd)
         {
-            string query = "SELECT UserID, Username, Nickname, PasswordHash, Salt FROM Users WHERE UserID=@userID";
+            string query = getPwd ?
+                "SELECT UserID, Username, Nickname, PasswordHash, Salt, OnlineStatus FROM Users WHERE UserID = @userID" :
+                "SELECT UserID, Username, Nickname, OnlineStatus FROM Users WHERE UserID = @userID";
 
             try
             {
@@ -293,6 +298,7 @@ static class DBHelper
                     UserID = reader.GetInt32("UserID"),
                     Username = reader.GetString("Username"),
                     Nickname = reader.GetString("Nickname"),
+                    OnlineStatus = reader.GetBoolean("OnlineStatus"),
                     PwdSet = pwdSet
                 }, "");
             }
@@ -305,8 +311,8 @@ static class DBHelper
         public static async Task<(List<User>? users, string errorMessage)> GetAll(bool getPwd)
         {
             string query = getPwd ?
-                "SELECT UserID, Username, Nickname, PasswordHash, Salt FROM Users ORDER BY UserID" :
-                "SELECT UserID, Username, Nickname FROM Users ORDER BY UserID";
+                "SELECT UserID, Username, Nickname, PasswordHash, Salt, OnlineStatus FROM Users ORDER BY UserID" :
+                "SELECT UserID, Username, Nickname, OnlineStatus FROM Users ORDER BY UserID";
 
             List<User> users = [];
             
@@ -338,6 +344,7 @@ static class DBHelper
                         UserID = reader.GetInt32("UserID"),
                         Username = reader.GetString("Username"),
                         Nickname = reader.GetString("Nickname"),
+                        OnlineStatus = reader.GetBoolean("OnlineStatus"),
                         PwdSet = pwdSet
                     });
                 }
@@ -395,6 +402,28 @@ static class DBHelper
             {
                 return (false, ex.Message);
             }
+        }
+
+        public static async Task<(bool success, string errorMessage)> SetAllOffline()
+        {
+            string query = "UPDATE Users SET OnlineStatus = FALSE";
+
+            try
+            {
+                using MySqlConnection conn = new(connectionString);
+                await conn.OpenAsync();
+
+                using MySqlCommand cmd = new(query.ToString(), conn);
+
+                await cmd.ExecuteNonQueryAsync();
+
+                return (true, "");
+            }
+            catch (MySqlException ex)
+            {
+                return (false, ex.Message);
+            }
+
         }
     }
 

@@ -716,6 +716,10 @@ static class ClientHelper
                             WriteNotice($"[Client] Group info: '{requestedGroup?.Info(true, true)}'", prompt);
                             continue;
 
+                        case CommandType.Disconnect:
+                            WriteNotice("[Client] Server shut down", prompt);
+                            return;
+
                         case CommandType.Error:
                             WriteNotice($"[Client] Error while echoing: {receivedCmd.Payload}", prompt);
                             return;
@@ -730,7 +734,7 @@ static class ClientHelper
             catch(IOException) {}
             catch(Exception ex)
             {
-                WriteNotice($" Error while echoing msg: ({ex.GetType().Name}) {ex.Message}", prompt);
+                WriteNotice($"[Client] Error while echoing msg: ({ex.GetType().Name}) {ex.Message}", prompt);
                 // WriteLine(ex);
                 ReadKey(true);
             }

@@ -24,12 +24,12 @@ class ChatGroup
     }
     
     public override string ToString()
-        => $"'Group({GroupID})'";
+        => $"Group(ID:{GroupID})";
 
     public string Info(bool showName, bool showOnline)
     {
         StringBuilder info = new($"[ID: {GroupID:D3}]");
-        if (showName) info.Append($" Group name: '{GroupName}'");
+        if (showName) info.Append($" Name: {GroupName}");
         if (showOnline) info.Append($" ({OnlineCount} connected)");
         return info.ToString();
     }

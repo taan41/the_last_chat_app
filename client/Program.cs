@@ -46,15 +46,12 @@ class Client
                     UserMenu(stream, loggedInUser);
                 }
             }
-            catch(IOException)
-            {
-                WriteLine(" Error: Server is offline");
-                ReadKey(true);
-            }
             catch(Exception ex)
             {
-                WriteLine($" Error: ({ex.GetType().Name}) {ex.Message}");
-                // WriteLine(ex);
+                if (ex is IOException || ex is SocketException)
+                    WriteLine(" Server is offline");
+                else
+                    WriteLine($" Error: ({ex.GetType().Name}) {ex.Message}");
                 ReadKey(true);
             }
         }

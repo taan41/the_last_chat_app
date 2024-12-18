@@ -1,6 +1,6 @@
 ﻿using System.Net;
 using System.Net.Sockets;
-
+using Org.BouncyCastle.Tls;
 using static System.Console;
 using static ServerHelper;
 
@@ -12,7 +12,7 @@ class Server
     static readonly List<ChatHandler> chatHandlers = [];
     static TcpListener? server;
 
-    public static void Main()
+    public static async Task Main()
     {
         string? serverIP = null;
         int port = defaultPort;
@@ -21,7 +21,7 @@ class Server
 
         try
         {
-            if(!CheckMySqlConn())
+            if(!await CheckMySqlConn())
                 return;
 
             while(true)
@@ -56,12 +56,11 @@ class Server
         }
     }
 
-    static bool CheckMySqlConn()
+    static async Task<bool> CheckMySqlConn()
     {
         string? server, db, uid, password;
-        bool done = false;
 
-        while(!done)
+        while(true)
         {
             IOHelper.WriteHeader("Zelo Server Control Center");
             WriteLine(" MySql database info:");
@@ -92,16 +91,28 @@ class Server
 
             IOHelper.WriteBorder();
 
-            if(done = DBHelper.Initialize.Start(server, db, uid, password, out string errorMessage))
+            if(DBHelper.Initialize.Start(server, db, uid, password, out string errorMessage))
                 WriteLine(" Connect to MySql database successfully");
             else
+            {
                 WriteLine($" Error while connecting to MySql DB: {errorMessage}");
+                ReadKey(true);
+                return false;
+            }
 
             LogManager.Initialize();
+
+            (bool success, errorMessage) = await DBHelper.UserDB.SetAllOffline();
+            if(!success)
+            {
+                WriteLine($" Error while setting users to offline: {errorMessage}");
+                ReadKey(true);
+                return false;
+            }
+
             ReadKey(true);
+            return true;
         }
-        
-        return true;
     }
 
     static void ServerStartUp(ref string? serverIP, ref int port, out bool stopProgram)
@@ -209,6 +220,8 @@ class Server
                     continue;
 
                 case "0": case null:
+                    Command shutDownCmd = new(CommandType.Disconnect, null);
+                    clientHanlders.ForEach(client => client.EchoCmd(shutDownCmd, CancellationToken.None));
                     WriteLine(" Shutting down server...");
                     ReadKey(true);
                     return;

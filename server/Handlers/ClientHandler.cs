@@ -22,7 +22,7 @@ class ClientHandler
         stream = _client.GetStream();
         endPoint = _client.Client.RemoteEndPoint!;
 
-        LogManager.AddLog($"Client connected", this);
+        LogManager.AddLog($"Connected to server", this);
     }
 
     public override string ToString()
@@ -68,9 +68,7 @@ class ClientHandler
                         break;
 
                     case CommandType.Logout:
-                        LogManager.AddLog($"Logged out from {mainUser}", this);
-                        mainUser = null;
-                        cmdToSend.Set(CommandType.Logout, null);
+                        cmdToSend = await Logout(receivedCmd);
                         break;
 
                     case CommandType.ChangeNickname:
@@ -194,7 +192,7 @@ class ClientHandler
         if(!success)
             return Helper.ClientErrorCmd(this, cmd, errorMessage);
 
-        LogManager.AddLog($"Registered '{registeredUser.Username}'", this);
+        LogManager.AddLog($"Registered Username '{registeredUser.Username}'", this);
         return new(cmd.CommandType, null);
     }
 
@@ -216,14 +214,29 @@ class ClientHandler
         if(mainUser != null || tempUser == null)
             return Helper.ClientErrorCmd(this, cmd, "Invalid mainUser/tempUser");
 
-        var (success, errorMessage) = await DBHelper.UserDB.Update(tempUser.UserID, null, false, null);
+        var (success, errorMessage) = await DBHelper.UserDB.Update(tempUser.UserID, null, true, null);
 
         if(!success)
             return Helper.ClientErrorCmd(this, cmd, errorMessage);
 
         mainUser = tempUser;
-        LogManager.AddLog($"Logged in as '{mainUser}'", this);
+        LogManager.AddLog($"Logged in as {mainUser}", endPoint);
         return new(cmd.CommandType, mainUser.Serialize());
+    }
+
+    private async Task<Command> Logout(Command cmd)
+    {
+        if(mainUser == null)
+            return Helper.ClientErrorCmd(this, cmd, "Invalid mainUser");
+
+        var (success, errorMessage) = await DBHelper.UserDB.Update(mainUser.UserID, null, false, null);
+
+        if(!success)
+            return Helper.ClientErrorCmd(this, cmd, errorMessage);
+
+        LogManager.AddLog($"Logged out from {mainUser}", endPoint);
+        mainUser = null;
+        return new(cmd.CommandType, null);
     }
 
     private async Task<Command> ChangeNickname(Command cmd)
@@ -238,7 +251,7 @@ class ClientHandler
         if(!success)
             return Helper.ClientErrorCmd(this, cmd, errorMessage);
         
-        LogManager.AddLog($"Changed nickname of '{mainUser}' to '{newNickname}'", this);
+        LogManager.AddLog($"Changed nickname of {mainUser} from '{mainUser.Nickname}' to '{newNickname}'", this);
         mainUser.Nickname = newNickname;
         return new(cmd.CommandType, null);
     }
@@ -255,7 +268,7 @@ class ClientHandler
         if(!success)
             return Helper.ClientErrorCmd(this, cmd, errorMessage);
         
-        LogManager.AddLog($"Changed password of '{mainUser}'", this);
+        LogManager.AddLog($"Changed password of {mainUser}", this);
         mainUser.PwdSet = newPwd;
         return new(cmd.CommandType, null);
     }
@@ -280,7 +293,7 @@ class ClientHandler
         if(partner == null)
             return (Helper.ClientErrorCmd(this, cmd, errorMessage), null);
 
-        LogManager.AddLog($"Messaging '{partner}'", this);
+        LogManager.AddLog($"Messaging {partner}", this);
         Server.JoinPrivate(this, mainUser.UserID, partner.UserID);
         return (new(cmd.CommandType, partner.Serialize()), partner);
     }
@@ -345,7 +358,7 @@ class ClientHandler
             return Helper.ClientErrorCmd(this, cmd, errorMessage2);
 
         Server.DisposeChat(groupID);
-        LogManager.AddLog($"Deleted group '{groupToDel}'", this);
+        LogManager.AddLog($"Deleted group {groupToDel}", this);
         return new(cmd.CommandType, null);
     }
 
@@ -366,7 +379,7 @@ class ClientHandler
         if (groupToJoin == null)
             return Helper.ClientErrorCmd(this, cmd, errorMessage);
         
-        LogManager.AddLog($"Connecting to '{groupToJoin}'", this);
+        LogManager.AddLog($"Connecting to {groupToJoin}", this);
         Server.JoinChatGroup(groupToJoin, this);
         return new(cmd.CommandType, groupToJoin.Serialize());
     }
@@ -393,7 +406,7 @@ class ClientHandler
 
     private Command RemoveGroupHandler(Command cmd)
     {
-        LogManager.AddLog($"Disconnecting from '{groupHandler}'", this);
+        LogManager.AddLog($"Disconnecting from {groupHandler}", this);
 
         groupHandler?.RemoveClient(this);
         groupHandler = null;

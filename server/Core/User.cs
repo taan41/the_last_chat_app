@@ -7,8 +7,8 @@ class User
     public int UserID { get; set; } = -1;
     public string Username { get; set; } = "";
     public string Nickname { get; set; } = "";
-    public bool OnlineStatus { get; set; } = false;
     public PasswordSet? PwdSet { get; set; }
+    public bool OnlineStatus { get; set; } = false;
 
     public User() {}
 
@@ -21,15 +21,18 @@ class User
     }
     
     public override string ToString()
-        => $"'User({UserID})'";
+        => $"User(ID:{UserID})";
 
     public string Info(bool showUsername, bool showNickname, bool showOnline)
     {
-        StringBuilder info = new($"[ID: {UserID}]");
-        if (showUsername) info.Append($" Username: '{Username}'");
-        if (showNickname) info.Append($" Nickname: '{Nickname}'");
-        if (showOnline) info.Append($" ({(OnlineStatus ? "Online" : "Offline")})");
-        return info.ToString();
+        List<string> info = [];
+        if (showUsername) info.Add($" Username: {Username}");
+        if (showNickname) info.Add($" Nickname: {Nickname}");
+
+        StringBuilder sb = new($"[ID: {UserID}]");
+        sb.AppendJoin(',', info);
+        if (showOnline) sb.Append($" ({(OnlineStatus ? "Online" : "Offline")})");
+        return sb.ToString();
     }
 
     public string Serialize()
