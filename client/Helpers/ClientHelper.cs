@@ -65,7 +65,7 @@ static class ClientHelper
                     {
                         loggedInUser = User.Deserialize(receivedCmd.Payload);
 
-                        if (loggedInUser == null || loggedInUser.UID == -1)
+                        if (loggedInUser == null || loggedInUser.UserID == -1)
                         {
                             WriteLine(" Error: Received invalid user data");
                             ReadKey(true);
@@ -544,7 +544,7 @@ static class ClientHelper
         public static void WriteMsgHistory()
         {
             Clear();
-            msgHistory.ForEach(msg => WriteLine(msg.ToString()));
+            msgHistory.ForEach(msg => WriteLine(msg.Print()));
         }
 
         public static void WriteMessage(string content, string prompt)
@@ -564,7 +564,7 @@ static class ClientHelper
 
         public static void StartChatting(NetworkStream stream, User mainUser, User? partner, ChatGroup? joinedGroup)
         {
-            if(mainUser.UID == -1 || (joinedGroup == null && partner == null))
+            if(mainUser.UserID == -1 || (joinedGroup == null && partner == null))
             {
                 WriteLine(" Error: Null chatting data");
                 return;
@@ -632,7 +632,7 @@ static class ClientHelper
                             }
                             else if (partner != null)
                             {
-                                WriteNotice($"\n[Client] Partner's info: '{partner.ToString(false)}'", prompt);
+                                WriteNotice($"\n[Client] Partner's info: '{partner.Info(false, true, true)}'", prompt);
                             }
                             continue;
 
@@ -660,7 +660,7 @@ static class ClientHelper
                 {
                     Message message = new(mainUser, partner, joinedGroup, content);
                     cmdToSend.Set(CommandType.Message, message.Serialize());
-                    WriteMessage(message.ToString(), prompt);
+                    WriteMessage(message.Print(), prompt);
                     lock (msgHistory)
                         msgHistory.Add(message);
                 }
@@ -705,7 +705,7 @@ static class ClientHelper
                                 WriteNotice("[Client] Error: Null echo message", prompt);
                             else
                             {
-                                WriteMessage(echoMsg.ToString(), prompt);
+                                WriteMessage(echoMsg.Print(), prompt);
                                 lock(msgHistory)
                                     msgHistory.Add(echoMsg);
                             }
@@ -713,7 +713,7 @@ static class ClientHelper
 
                         case CommandType.GetGroupInfo:
                             ChatGroup? requestedGroup = ChatGroup.Deserialize(receivedCmd.Payload);
-                            WriteNotice($"[Client] Group info: '{requestedGroup?.ToString(true)}'", prompt);
+                            WriteNotice($"[Client] Group info: '{requestedGroup?.Info(true, true)}'", prompt);
                             continue;
 
                         case CommandType.Error:
@@ -790,7 +790,7 @@ static class ClientHelper
 
             foreach(User user in users.GetRange(curPage * 10, Math.Min(users.Count - curPage * 10, 10)))
             {
-                WriteLine($" • {user.ToString(false)}");
+                WriteLine($" • {user.Info(false, true, true)}");
             }
 
             IOHelper.WriteBorder();
@@ -806,8 +806,8 @@ static class ClientHelper
         {
             Clear();
             IOHelper.WriteHeader("Zelo");
-            WriteLine(" 1. View chat group list & Join one");
-            WriteLine(" 2. Create & Manage created chat group(s)");
+            WriteLine(" 1. View subscribed chat groups");
+            WriteLine(" 2. Create & Manage created chat groups");
             WriteLine(" 0. Return");
             IOHelper.WriteBorder();
             Write(" Enter Choice: ");
@@ -822,7 +822,7 @@ static class ClientHelper
 
             foreach(ChatGroup group in groups.GetRange(curPage * 10, Math.Min(groups.Count - curPage * 10, 10)))
             {
-                WriteLine($" • {group.ToString(true)}");
+                WriteLine($" • {group.Info(true, true)}");
             }
 
             IOHelper.WriteBorder();
@@ -843,7 +843,7 @@ static class ClientHelper
 
             foreach(ChatGroup group in groups.GetRange(curPage * 10, Math.Min(groups.Count - curPage * 10, 10)))
             {
-                WriteLine($" • {group.ToString(false)}");
+                WriteLine($" • {group.Info(true, false)}");
             }
 
             IOHelper.WriteBorder();

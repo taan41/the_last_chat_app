@@ -1,0 +1,5 @@
+add isOnline as tinyint(1) in mysql;
+add amount of unread msg for private chats: SELECT SUM(read = FALSE) FROM messages;
+    get senderID where read = false, receiverID = mainUserID
+improve respond when creating things
+check database -> nah

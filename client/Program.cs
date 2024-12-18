@@ -222,7 +222,7 @@ class Client
             switch (IOHelper.ReadInput(false))
             {
                 case "1":
-                    ClientHelper.Action.SetPartner(stream, users, curPage, loggedInUser.UID, out User? partner);
+                    ClientHelper.Action.SetPartner(stream, users, curPage, loggedInUser.UserID, out User? partner);
 
                     if(partner != null)
                     {
@@ -344,7 +344,7 @@ class Client
         List<ChatGroup>? groups;
 
         // Get list of groups created by currently logged-in user
-        Command cmdToSend = new(CommandType.GetCreatedGroups, loggedInUser.UID.ToString());
+        Command cmdToSend = new(CommandType.GetCreatedGroups, loggedInUser.UserID.ToString());
 
         if (CommandHandler.SendAndHandle(stream, ref buffer, cmdToSend, out Command receivedCmd))
         {
@@ -367,7 +367,7 @@ class Client
             switch (IOHelper.ReadInput(false))
             {
                 case "1":
-                    ClientHelper.Action.CreateChatGroup(stream, loggedInUser.UID, groups, curPage);
+                    ClientHelper.Action.CreateChatGroup(stream, loggedInUser.UserID, groups, curPage);
                     break;
 
                 case "2":
@@ -392,7 +392,7 @@ class Client
             }
 
             // Refresh list after creating/deleting
-            cmdToSend.Set(CommandType.GetCreatedGroups, loggedInUser.UID.ToString());
+            cmdToSend.Set(CommandType.GetCreatedGroups, loggedInUser.UserID.ToString());
 
             if (CommandHandler.SendAndHandle(stream, ref buffer, cmdToSend, out receivedCmd))
             {

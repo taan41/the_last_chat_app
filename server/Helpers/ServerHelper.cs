@@ -68,7 +68,7 @@ static class ServerHelper
 
             foreach(ChatGroup group in groups.GetRange(curPage * 10, Math.Min(groups.Count - curPage * 10, 10)))
             {
-                WriteLine($" • {group.ToString(true)}");
+                WriteLine($" • {group.Info(true, true)}");
             }
 
             IOHelper.WriteBorder();

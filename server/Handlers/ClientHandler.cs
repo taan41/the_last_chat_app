@@ -10,7 +10,7 @@ class ClientHandler
     readonly NetworkStream stream;
     readonly EndPoint endPoint;
 
-    ChatGroupHandler? groupHandler;
+    ChatHandler? groupHandler;
     User? mainUser = null, partner = null;
 
     public EndPoint EndPoint => endPoint;
@@ -26,13 +26,13 @@ class ClientHandler
     }
 
     public override string ToString()
-        => endPoint.ToString() ?? "Null client";
+        => mainUser?.ToString() ?? endPoint?.ToString() ?? "Null client";
 
     public async Task HandlingClientAsync(CancellationToken token)
     {
         try
         {
-            byte[] buffer = new byte[MagicNumbers.bufferSize];
+            byte[] buffer = new byte[MagicNum.bufferSize];
             Memory<byte> memory = new(buffer, 0, buffer.Length);
             int bytesRead;
 
@@ -64,7 +64,7 @@ class ClientHandler
                         break;
 
                     case CommandType.Login:
-                        cmdToSend = Login(receivedCmd, tempUser);
+                        cmdToSend = await Login(receivedCmd, tempUser);
                         break;
 
                     case CommandType.Logout:
@@ -162,7 +162,7 @@ class ClientHandler
         }
     }
 
-    public void SetUpGroupHandler(ChatGroupHandler? _groupHandler)
+    public void SetUpGroupHandler(ChatHandler? _groupHandler)
     {
         groupHandler = _groupHandler;
     }
@@ -174,7 +174,7 @@ class ClientHandler
 
     private async Task<Command> CheckUsername(Command cmd)
     {
-        var (success, errorMessage) = await DbHelper.CheckUsername(cmd.Payload);
+        var (success, errorMessage) = await DBHelper.UserDB.CheckUsername(cmd.Payload);
 
         if(!success)
             return Helper.ClientErrorCmd(this, cmd, errorMessage);
@@ -189,7 +189,7 @@ class ClientHandler
         if(registeredUser == null)
             return Helper.ClientErrorCmd(this, cmd, "Invalid registering user");
 
-        var (success, errorMessage) = await DbHelper.AddUser(registeredUser);
+        var (success, errorMessage) = await DBHelper.UserDB.Add(registeredUser);
 
         if(!success)
             return Helper.ClientErrorCmd(this, cmd, errorMessage);
@@ -200,7 +200,7 @@ class ClientHandler
 
     private async Task<(Command cmdToSend, User? requestedUser)> GetUserPwd(Command cmd)
     {
-        var (requestedUser, errorMessage) = await DbHelper.GetUser(cmd.Payload, true);
+        var (requestedUser, errorMessage) = await DBHelper.UserDB.Get(cmd.Payload, true);
 
         if(requestedUser == null)
             return (Helper.ClientErrorCmd(this, cmd, errorMessage), null);
@@ -211,10 +211,15 @@ class ClientHandler
         return (new(cmd.CommandType, requestedUser.PwdSet.Serialize()), requestedUser);
     }
 
-    private Command Login(Command cmd, User? tempUser)
+    private async Task<Command> Login(Command cmd, User? tempUser)
     {
         if(mainUser != null || tempUser == null)
             return Helper.ClientErrorCmd(this, cmd, "Invalid mainUser/tempUser");
+
+        var (success, errorMessage) = await DBHelper.UserDB.Update(tempUser.UserID, null, false, null);
+
+        if(!success)
+            return Helper.ClientErrorCmd(this, cmd, errorMessage);
 
         mainUser = tempUser;
         LogManager.AddLog($"Logged in as '{mainUser}'", this);
@@ -228,7 +233,7 @@ class ClientHandler
 
         string newNickname = cmd.Payload;
 
-        var (success, errorMessage) = await DbHelper.UpdateUser(mainUser, newNickname, null);
+        var (success, errorMessage) = await DBHelper.UserDB.Update(mainUser.UserID, newNickname, null, null);
 
         if(!success)
             return Helper.ClientErrorCmd(this, cmd, errorMessage);
@@ -245,7 +250,7 @@ class ClientHandler
 
         var newPwd = PasswordSet.Deserialize(cmd.Payload);
 
-        var (success, errorMessage) = await DbHelper.UpdateUser(mainUser, null, newPwd);
+        var (success, errorMessage) = await DBHelper.UserDB.Update(mainUser.UserID, null, null, newPwd);
 
         if(!success)
             return Helper.ClientErrorCmd(this, cmd, errorMessage);
@@ -257,7 +262,7 @@ class ClientHandler
 
     private async Task<Command> GetUserList(Command cmd)
     {
-        var (users, errorMessage) = await DbHelper.GetAllUser(false);
+        var (users, errorMessage) = await DBHelper.UserDB.GetAll(false);
 
         if(users == null)
             return Helper.ClientErrorCmd(this, cmd, errorMessage);
@@ -267,16 +272,16 @@ class ClientHandler
 
     private async Task<(Command, User?)> SetPartner(Command cmd)
     {
-        if(mainUser == null || mainUser.UID == -1)
+        if(mainUser == null || mainUser.UserID == -1)
             return (Helper.ClientErrorCmd(this, cmd, "Invalid mainUser"), null);
 
-        var (partner, errorMessage) = await DbHelper.GetUser(Convert.ToInt32(cmd.Payload), false);
+        var (partner, errorMessage) = await DBHelper.UserDB.Get(Convert.ToInt32(cmd.Payload), false);
 
         if(partner == null)
             return (Helper.ClientErrorCmd(this, cmd, errorMessage), null);
 
         LogManager.AddLog($"Messaging '{partner}'", this);
-        Server.JoinPrivate(this, mainUser.UID, partner.UID);
+        Server.JoinPrivate(this, mainUser.UserID, partner.UserID);
         return (new(cmd.CommandType, partner.Serialize()), partner);
     }
 
@@ -285,7 +290,7 @@ class ClientHandler
         if(mainUser == null || partner == null)
             return Helper.ClientErrorCmd(this, cmd, "Invalid mainUser/partner data");
 
-        var (messages, errorMessage) = await DbHelper.GetPrivateMessageHistory(mainUser.UID, partner.UID);
+        var (messages, errorMessage) = await DBHelper.MessageDB.GetHistoryPrivate(mainUser.UserID, partner.UserID);
 
         if (messages == null)
             return Helper.ClientErrorCmd(this, cmd, errorMessage);
@@ -295,7 +300,7 @@ class ClientHandler
 
     private async Task<Command> GetCreatedGroups(Command cmd)
     {
-        var (groups, errorMessage) = await DbHelper.GetChatGroupByCreator(Convert.ToInt32(cmd.Payload));
+        var (groups, errorMessage) = await DBHelper.ChatGroupDB.GetByCreator(Convert.ToInt32(cmd.Payload));
 
         if(groups == null)
             return Helper.ClientErrorCmd(this, cmd, errorMessage);
@@ -310,7 +315,7 @@ class ClientHandler
         if(chatGroup == null)
             return Helper.ClientErrorCmd(this, cmd, "Null chatGroup");
 
-        var (success, errorMessage) = await DbHelper.AddChatGroup(chatGroup);
+        var (success, errorMessage) = await DBHelper.ChatGroupDB.Add(chatGroup);
 
         if(!success)
             return Helper.ClientErrorCmd(this, cmd, errorMessage);
@@ -326,27 +331,27 @@ class ClientHandler
 
         int groupID = Convert.ToInt32(cmd.Payload);
 
-        var (groupToDel, errorMessage) = await DbHelper.GetChatGroup(groupID);
+        var (groupToDel, errorMessage) = await DBHelper.ChatGroupDB.Get(groupID);
 
         if(groupToDel == null)
             return Helper.ClientErrorCmd(this, cmd, errorMessage);
         
-        if(groupToDel.CreatorID != mainUser.UID)
+        if(groupToDel.CreatorID != mainUser.UserID)
             return Helper.ClientErrorCmd(this, cmd, "Invalid ID");
 
-        var (success, errorMessage2) = await DbHelper.DeleteChatGroup(groupID);
+        var (success, errorMessage2) = await DBHelper.ChatGroupDB.Delete(groupID);
 
         if(!success)
             return Helper.ClientErrorCmd(this, cmd, errorMessage2);
 
-        Server.DisposeChatGroup(groupID);
-        LogManager.AddLog($"Deleted group '{groupToDel.ToString(false)}'", this);
+        Server.DisposeChat(groupID);
+        LogManager.AddLog($"Deleted group '{groupToDel}'", this);
         return new(cmd.CommandType, null);
     }
 
     private async Task<Command> GetAllGroupList(Command cmd)
     {
-        var (groups, errorMessage) = await DbHelper.GetAllChatGroup();
+        var (groups, errorMessage) = await DBHelper.ChatGroupDB.GetAll();
 
         if(groups == null)
             return Helper.ClientErrorCmd(this, cmd, errorMessage);
@@ -356,19 +361,19 @@ class ClientHandler
 
     private async Task<Command> JoinGroup(Command cmd)
     {
-        var (groupToJoin, errorMessage) = await DbHelper.GetChatGroup(Convert.ToInt32(cmd.Payload));
+        var (groupToJoin, errorMessage) = await DBHelper.ChatGroupDB.Get(Convert.ToInt32(cmd.Payload));
 
         if (groupToJoin == null)
             return Helper.ClientErrorCmd(this, cmd, errorMessage);
         
-        LogManager.AddLog($"Connecting to '{groupToJoin.ToString(false)}'", this);
+        LogManager.AddLog($"Connecting to '{groupToJoin}'", this);
         Server.JoinChatGroup(groupToJoin, this);
         return new(cmd.CommandType, groupToJoin.Serialize());
     }
 
     private async Task<Command> GetGroupInfo(Command cmd)
     {
-        var (requestedGroup, errorMessage) = await DbHelper.GetChatGroup(Convert.ToInt32(cmd.Payload));
+        var (requestedGroup, errorMessage) = await DBHelper.ChatGroupDB.Get(Convert.ToInt32(cmd.Payload));
 
         if (requestedGroup == null)
             return Helper.ClientErrorCmd(this, cmd, errorMessage);
@@ -378,7 +383,7 @@ class ClientHandler
 
     private async Task<Command> GetGroupHistory(Command cmd)
     {
-        var (messages, errorMessage) = await DbHelper.GetGroupHistory(Convert.ToInt32(cmd.Payload));
+        var (messages, errorMessage) = await DBHelper.MessageDB.GetHistoryGroup(Convert.ToInt32(cmd.Payload));
 
         if (messages == null)
             return Helper.ClientErrorCmd(this, cmd, errorMessage);

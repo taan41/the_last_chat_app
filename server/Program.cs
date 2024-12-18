@@ -9,7 +9,7 @@ class Server
     const int defaultPort = 5000;
 
     static readonly List<ClientHandler> clientHanlders = [];
-    static readonly List<ChatGroupHandler> groupHandlers = [];
+    static readonly List<ChatHandler> chatHandlers = [];
     static TcpListener? server;
 
     public static void Main()
@@ -92,7 +92,7 @@ class Server
 
             IOHelper.WriteBorder();
 
-            if(done = DbHelper.InitMySql(server, db, uid, password, out string errorMessage))
+            if(done = DBHelper.Initialize.Start(server, db, uid, password, out string errorMessage))
                 WriteLine(" Connect to MySql database successfully");
             else
                 WriteLine($" Error while connecting to MySql DB: {errorMessage}");
@@ -252,7 +252,7 @@ class Server
 
     static async void ManageChatGroups()
     {
-        (List<ChatGroup>? groups, _) = await DbHelper.GetAllChatGroup();
+        (List<ChatGroup>? groups, _) = await DBHelper.ChatGroupDB.GetAll();
 
         if (groups == null)
             return;
@@ -329,7 +329,7 @@ class Server
             if (action == 1)
             {
                 Write(" Enter group's Name: ");
-                input = IOHelper.ReadInput(MagicNumbers.groupNameMax, false);
+                input = IOHelper.ReadInput(MagicNum.groupNameMax, false);
 
                 if (input == null)
                 {
@@ -338,13 +338,13 @@ class Server
                 }
 
                 groupToChange.GroupName = input;
-                await DbHelper.UpdateChatGroup(groupToChange, false);
+                await DBHelper.ChatGroupDB.Update(groupToChange.GroupID, groupToChange.GroupName, null);
             }
             else if (action == 2)
             {
                 groups.Remove(groupToChange);
-                await DbHelper.DeleteChatGroup(groupID);
-                groupHandlers.Find(handler => handler.GetGroup != null && handler.GetGroup.GroupID == groupID)?.Dispose();
+                await DBHelper.ChatGroupDB.Delete(groupID);
+                chatHandlers.Find(handler => handler is GroupChatHandler groupHandler && groupHandler.GetGroup.GroupID == groupID)?.Dispose();
             }
             
             action = 0;
@@ -354,51 +354,51 @@ class Server
 
     public static void JoinChatGroup(ChatGroup groupToJoin, ClientHandler client)
     {
-        lock(groupHandlers)
+        lock(chatHandlers)
         {
-            foreach(ChatGroupHandler handler in groupHandlers)
+            foreach(var handler in chatHandlers)
             {
-                if(handler.GetGroup != null && handler.GetGroup.GroupID == groupToJoin.GroupID)
+                if(handler is GroupChatHandler groupHander && groupHander.GetGroup.GroupID == groupToJoin.GroupID)
                 {
                     handler.AddClient(client);
                     return;
                 }
             }
 
-            groupHandlers.Add(new(groupToJoin, client, DisposeChatGroup));
+            chatHandlers.Add(new GroupChatHandler(groupToJoin, client, DisposeChat));
         }
     }
 
     public static void JoinPrivate(ClientHandler client, int mainUserID, int partnerID)
     {
-        lock(groupHandlers)
+        lock(chatHandlers)
         {
-            foreach(ChatGroupHandler handler in groupHandlers)
+            foreach(var handler in chatHandlers)
             {
-                if(handler.GetMemIDs != null && handler.GetMemIDs.Contains(mainUserID) && handler.GetMemIDs.Contains(partnerID))
+                if(handler is PrivateChatHandler privHandler && privHandler.GetMembers.Contains(mainUserID) && privHandler.GetMembers.Contains(partnerID))
                 {
                     handler.AddClient(client);
                     return;
                 }
             }
 
-            groupHandlers.Add(new(client, mainUserID, partnerID, DisposeChatGroup));
+            chatHandlers.Add(new PrivateChatHandler(client, mainUserID, partnerID, DisposeChat));
         }
     }
 
-    public static void DisposeChatGroup(ChatGroupHandler groupHandler)
+    public static void DisposeChat(ChatHandler groupHandler)
     {
-        lock(groupHandlers)
+        lock(chatHandlers)
         {
-            groupHandlers.Remove(groupHandler);
+            chatHandlers.Remove(groupHandler);
         }
     }
 
-    public static void DisposeChatGroup(int groupID)
+    public static void DisposeChat(int groupID)
     {
-        lock(groupHandlers)
+        lock(chatHandlers)
         {
-            groupHandlers.Find(handler => handler.GetGroup != null && handler.GetGroup.GroupID == groupID)?.Dispose();
+            chatHandlers.Find(handler => handler is GroupChatHandler groupHandler && groupHandler.GetGroup.GroupID == groupID)?.Dispose();
         }
     }
 }

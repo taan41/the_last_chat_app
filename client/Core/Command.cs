@@ -10,7 +10,7 @@ enum CommandType
     GetCreatedGroups, CreateGroup, DeleteGroup,
     GetGroupList, GetGroupInfo, GetGroupHistory, 
     JoinGroup, LeaveGroup,
-    Message, EchoMessage, SendFile,
+    Message, EchoMessage, NoticePrivateMsg, SendFile,
     Disconnect
 }
 

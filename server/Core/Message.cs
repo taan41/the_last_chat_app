@@ -22,20 +22,20 @@ class Message
     public Message(User sender, User? receiver, ChatGroup? joinedGroup, string content)
     {
         if(receiver != null)
-            ReceiverID = receiver.UID;
+            ReceiverID = receiver.UserID;
         else if(joinedGroup != null)
             GroupID = joinedGroup.GroupID;
         else
             throw new ArgumentException("Both ReceiverID and GroupID can't be null");
         
-        SenderID = sender.UID;
+        SenderID = sender.UserID;
         Nickname = sender.Nickname;
         Content = content;
     }
 
-    public override string ToString()
+    public string Print()
         => $"[{Timestamp:dd/MM HH:mm}] {Nickname}: {Content}";
-    
+
     public string Serialize()
         => JsonSerializer.Serialize(this);
 

@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-class MagicNumbers
+static class MagicNum
 {
     public const int
         usernameMin = 6, usernameMax = 50,
@@ -13,7 +13,15 @@ class MagicNumbers
         bufferSize = 2048;
 }
 
-class Utilities
+static class FriendStatus
+{
+    public const string
+        pending = "Pending",
+        confirmed = "Confirmed",
+        blocked = "Blocked";
+}
+
+static class Utilities
 {
     // UTF-16 encoding methods
     public static string DecodeBytes(byte[] data) => Encoding.UTF8.GetString(data);
@@ -25,11 +33,11 @@ class Utilities
     // Hash & verify password
     public static (byte[] PwdHash, byte[] Salt) HashPassword(string pwd)
     {
-        byte[] salt = new byte[MagicNumbers.pwdSaltLen];
+        byte[] salt = new byte[MagicNum.pwdSaltLen];
         RandomNumberGenerator.Fill(salt);
 
         using var pbkdf2 = new Rfc2898DeriveBytes(EncodeString(pwd), salt, 5000, HashAlgorithmName.SHA256);
-        byte[] pwdHash = pbkdf2.GetBytes(MagicNumbers.pwdHashLen);
+        byte[] pwdHash = pbkdf2.GetBytes(MagicNum.pwdHashLen);
 
         return (pwdHash, salt);
     }
@@ -37,7 +45,7 @@ class Utilities
     public static bool VerifyPassword(string pwd, byte[] storedPwdHash, byte[] storedSalt)
     {
         using var pbkdf2 = new Rfc2898DeriveBytes(EncodeString(pwd), storedSalt, 5000, HashAlgorithmName.SHA256);
-        byte[] pwdHash = pbkdf2.GetBytes(MagicNumbers.pwdHashLen);
+        byte[] pwdHash = pbkdf2.GetBytes(MagicNum.pwdHashLen);
 
         return pwdHash.SequenceEqual(storedPwdHash);
     }

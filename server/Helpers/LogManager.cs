@@ -17,7 +17,7 @@ static class LogManager
 
     public static async void Initialize()
     {
-        var (oldLog, errorMessage) = await DbHelper.GetLogHistory();
+        var (oldLog, errorMessage) = await DBHelper.LogDB.GetAll();
 
         if(oldLog == null)
         {
@@ -37,7 +37,7 @@ static class LogManager
         if(!initailized)
             return;
 
-        var (success, errorMessage) = await DbHelper.AddLog(sourceMethod ?? "null", logContent);
+        var (success, errorMessage) = await DBHelper.LogDB.Add(sourceMethod ?? "null", logContent);
 
         if(success)
         {
@@ -61,7 +61,7 @@ static class LogManager
         lock(logList)
             logList.Clear();
 
-        var (success, errorMessage) = await DbHelper.ClearLog();
+        var (success, errorMessage) = await DBHelper.LogDB.Clear();
 
         if(!success)
         {
