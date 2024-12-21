@@ -51,7 +51,8 @@ class Client
                 if (ex is IOException || ex is SocketException)
                     WriteLine(" Server is offline");
                 else
-                    WriteLine($" Error: ({ex.GetType().Name}) {ex.Message}");
+                    // WriteLine($" Error: ({ex.GetType().Name}) {ex.Message}");
+                    WriteLine(ex);
                 ReadKey(true);
             }
         }
@@ -146,31 +147,31 @@ class Client
         }
     }
 
-    static void UserMenu(NetworkStream stream, User loggedInUser)
+    static void UserMenu(NetworkStream stream, User mainUser)
     {
         byte[] buffer = new byte[MagicNum.bufferSize];
         Command cmdToSend = new();
 
         while (true)
         {
-            ClientMenu.MainUser(loggedInUser.Nickname);
+            ClientMenu.MainUser(mainUser.Nickname);
 
             switch (IOHelper.ReadInput(false))
             {
                 case "1":
-                    ClientAction.ChangeNickname(stream, ref buffer, ref loggedInUser);
+                    ClientAction.ChangeNickname(stream, ref buffer, ref mainUser);
                     continue;
 
                 case "2":
-                    ClientAction.ChangePassword(stream, ref buffer, ref loggedInUser);
+                    ClientAction.ChangePassword(stream, ref buffer, ref mainUser);
                     continue;
 
                 case "3":
-                    FriendsMenu(stream, loggedInUser);
+                    FriendsMenu(stream, mainUser);
                     continue;
 
                 case "4":
-                    GroupMenu(stream, loggedInUser);
+                    GroupMenu(stream, mainUser);
                     continue;
 
                 case "5":
@@ -188,10 +189,10 @@ class Client
         }
     }
 
-    static void FriendsMenu(NetworkStream stream, User loggedInUser)
+    static void FriendsMenu(NetworkStream stream, User mainUser)
     {
         byte[] buffer = new byte[MagicNum.bufferSize];
-        List<(User friend, int unread)>? friends = ClientAction.GetFriendList(stream, ref buffer);
+        List<Friend>? friends = ClientAction.GetFriendList(stream, ref buffer);
         List<User>? receivedRqs = ClientAction.GetUsers(stream, ref buffer, CommandType.GetReceivedRq);
         Command cmdToSend = new();
 
@@ -206,34 +207,31 @@ class Client
             switch (IOHelper.ReadInput(false))
             {
                 case "1":
-                    ClientAction.SetPartner(stream, ref buffer, friends, loggedInUser.UserID, out User? partner);
+                    ClientAction.SetPartner(stream, ref buffer, friends, mainUser.UserID, out User? partner);
 
                     if(partner != null)
                     {
-                        ClientAction.StartChatting(stream, loggedInUser, partner, null);
+                        ClientAction.StartChatting(stream, mainUser, partner, null);
 
                         cmdToSend.Set(CommandType.RemovePartner, null);
                         ClientHelper.SendCmd(stream, ref buffer, cmdToSend, out _);
                     }
-                    continue;
+                    break;
 
                 case "2":
                     ReceivedRqMenu(stream, ref receivedRqs);
-                    continue;
+                    break;
 
                 case "3":
                     ClientAction.RemoveFriend(stream, ref buffer, friends);
-                    friends = ClientAction.GetFriendList(stream, ref buffer);
-                    continue;
+                    break;
 
                 case "4":
-                    AllUserMenu(stream);
-                    continue;
+                    AllUserMenu(stream, mainUser);
+                    break;
 
                 case "7":
-                    friends = ClientAction.GetFriendList(stream, ref buffer);
-                    receivedRqs = ClientAction.GetUsers(stream, ref buffer, CommandType.GetReceivedRq);
-                    continue;
+                    break;
 
                 case "8":
                     if (curPage > 0)
@@ -251,6 +249,9 @@ class Client
                 default:
                     continue;
             }
+            
+            friends = ClientAction.GetFriendList(stream, ref buffer);
+            receivedRqs = ClientAction.GetUsers(stream, ref buffer, CommandType.GetReceivedRq);
         }
     }
 
@@ -317,11 +318,10 @@ class Client
         }
     }
 
-    static void AllUserMenu(NetworkStream stream)
+    static void AllUserMenu(NetworkStream stream, User mainUser)
     {
         byte[] buffer = new byte[MagicNum.bufferSize];
         List<User>? users = ClientAction.GetUsers(stream, ref buffer, CommandType.GetAllUsers);
-        CommandType cmdTypeToSend;
 
         int curPage = 0;
         string? input;
@@ -329,14 +329,15 @@ class Client
         {
             if (users == null) return;
 
-            ClientMenu.ReceivedRq(users, curPage);
+            ClientMenu.AllUser(users, curPage);
 
             input = IOHelper.ReadInput(false);
 
             switch (input)
             {
-                case "1" or "2" or "3" or "4" or "5" or "6":
-                    break;
+                case "1":
+                    ClientAction.SendRequest(stream, ref buffer, mainUser.UserID);
+                    continue;
 
                 case "7":
                     users = ClientAction.GetUsers(stream, ref buffer, CommandType.GetAllUsers);
@@ -361,7 +362,7 @@ class Client
         }
     }
 
-    static void GroupMenu(NetworkStream stream, User loggedInUser)
+    static void GroupMenu(NetworkStream stream, User mainUser)
     {
         byte[] buffer = new byte[MagicNum.bufferSize];
         List<ChatGroup>? subcribedGroups = ClientAction.GetGroups(stream, ref buffer, CommandType.GetSubcribed);
@@ -381,23 +382,27 @@ class Client
 
                     if(joinedGroup != null)
                     {
-                        ClientAction.StartChatting(stream, loggedInUser, null, joinedGroup);
+                        ClientAction.StartChatting(stream, mainUser, null, joinedGroup);
                         
                         cmdToSend.Set(CommandType.LeaveGroup, null);
                         ClientHelper.SendCmd(stream, ref buffer, cmdToSend, out _);
                     }
+                    subcribedGroups = ClientAction.GetGroups(stream, ref buffer, CommandType.GetSubcribed);
                     continue;
 
                 case "2":
                     ClientAction.SubUnsubToGroup(stream, ref buffer, subcribedGroups, false);
+                    subcribedGroups = ClientAction.GetGroups(stream, ref buffer, CommandType.GetSubcribed);
                     continue;
 
                 case "3":
                     AllGroupMenu(stream, subcribedGroups);
+                    subcribedGroups = ClientAction.GetGroups(stream, ref buffer, CommandType.GetSubcribed);
                     continue;
 
                 case "4":
-                    ManageCreatedMenu(stream, loggedInUser);
+                    ManageCreatedMenu(stream, mainUser);
+                    subcribedGroups = ClientAction.GetGroups(stream, ref buffer, CommandType.GetSubcribed);
                     continue;
 
                 case "7":
@@ -464,7 +469,7 @@ class Client
         }
     }
 
-    static void ManageCreatedMenu(NetworkStream stream, User loggedInUser)
+    static void ManageCreatedMenu(NetworkStream stream, User mainUser)
     {
         byte[] buffer = new byte[MagicNum.bufferSize];
         List<ChatGroup>? groups = ClientAction.GetGroups(stream, ref buffer, CommandType.GetCreatedGroups);
@@ -479,7 +484,7 @@ class Client
             switch (IOHelper.ReadInput(false))
             {
                 case "1":
-                    ClientAction.CreateGroup(stream, ref buffer, loggedInUser.UserID);
+                    ClientAction.CreateGroup(stream, ref buffer, mainUser.UserID);
                     groups = ClientAction.GetGroups(stream, ref buffer, CommandType.GetCreatedGroups);
                     continue;
 

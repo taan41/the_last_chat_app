@@ -37,11 +37,16 @@ static class ClientHelper
     public static string? InputData(string dataName, int minLength, int? maxLength, bool intercept)
     {
         string? inputBuffer;
+        string errorPrompt = $" Error: {dataName} must have at least {minLength} characters";
+        int moveLength = WindowWidth - CursorLeft + errorPrompt.Length;
         
         while ((inputBuffer = IOHelper.ReadInput(maxLength, intercept)) != null && inputBuffer.Length < minLength)
         {
-            WriteLine($" Error: {dataName} must have at least {minLength} characters");
+            Write(errorPrompt);
             ReadKey(true);
+            IOHelper.MoveCursor(-moveLength);
+            Write(new string(' ', moveLength));
+            IOHelper.MoveCursor(-moveLength);
         }
 
         return inputBuffer;

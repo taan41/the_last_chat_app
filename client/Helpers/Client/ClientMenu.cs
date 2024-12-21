@@ -44,15 +44,15 @@ static class ClientMenu
         Write(" Enter Choice: ");
     }
 
-    public static void Friends(List<(User, int)> friends, int curPage, int receivedRequestCount)
+    public static void Friends(List<Friend> friends, int curPage, int receivedRequestCount)
     {
         Clear();
         IOHelper.WriteHeader("Zelo");
         WriteLine($" Friend list (Page {curPage + 1}/{(friends.Count - 1) / 10 + 1}):");
 
-        foreach(var (friend, unread) in friends.GetRange(curPage * 10, Math.Min(friends.Count - curPage * 10, 10)))
+        foreach(var friend in friends.GetRange(curPage * 10, Math.Min(friends.Count - curPage * 10, 10)))
         {
-            WriteLine($" • {friend.Info(false, true, true)}{(unread > 0 ? $" -- {unread} unread" : "")}");
+            WriteLine($" • {friend.Info()}");
         }
 
         IOHelper.WriteBorder();
@@ -76,7 +76,7 @@ static class ClientMenu
 
         foreach(var user in users.GetRange(curPage * 10, Math.Min(users.Count - curPage * 10, 10)))
         {
-            WriteLine($" • {user.Info(false, true, false)}");
+            WriteLine($" • {user.Info(false, true)}");
         }
 
         IOHelper.WriteBorder();
@@ -102,7 +102,7 @@ static class ClientMenu
 
         foreach(var user in users.GetRange(curPage * 10, Math.Min(users.Count - curPage * 10, 10)))
         {
-            WriteLine($" • {user.Info(false, true, false)}");
+            WriteLine($" • {user.Info(false, true)}");
         }
 
         IOHelper.WriteBorder();
@@ -187,7 +187,7 @@ static class ClientMenu
         Write(" Enter Choice: ");
     }
 
-    public static void FileFolder(string defaultPath, string curPath)
+    public static void FileFolder(string curPath)
     {
         Clear();
         IOHelper.WriteHeader("Zelo");
@@ -231,7 +231,7 @@ static class ClientMenu
         WriteLine(" /info             -- Show info of current chat room");
         WriteLine(" /clear /cls       -- Clear console");
         WriteLine(" /reload           -- Clear console then re-write all messages");
-        WriteLine(" /file (filePath)  -- Send file to all connected users");
+        WriteLine(" /file (filePath)  -- Send file to current chat room");
         WriteLine(" /leave            -- Leave chat room");
         WriteLine(" You can also leave using 'ESC' key");
     }

@@ -109,7 +109,7 @@ class ClientHandler
                         cmdToSend = await UpdateAllFriend(receivedCmd, FriendStatus.Pending, FriendStatus.Blocked);
                         break;
                         
-                    case CommandType.GetUserList:
+                    case CommandType.GetAllUsers:
                         cmdToSend = await GetUserList(receivedCmd);
                         break;
 
@@ -158,7 +158,7 @@ class ClientHandler
                         cmdToSend = await SubUnsubToGroup(receivedCmd, false);
                         break;
 
-                    case CommandType.GetGroupList:
+                    case CommandType.GetAllGroups:
                         cmdToSend = await GetAllGroupList(receivedCmd);
                         break;
 
@@ -205,10 +205,11 @@ class ClientHandler
         catch(OperationCanceledException) {}
         catch(Exception ex)
         {
-            LogManager.AddLog($"Error while handling client: {ex.Message}", this);
+            LogManager.AddLog($"Error while handling client: {ex}", this);
         }
         finally
         {
+            Server.DisposeClient(this);
             stream.Close();
             client.Close();
         }
@@ -238,7 +239,7 @@ class ClientHandler
     {
         User? registeredUser = User.Deserialize(cmd.Payload);
 
-        if(registeredUser == null || registeredUser.UserID < 1)
+        if(registeredUser == null)
             return Helper.ErrorCmd(this, cmd, "Invalid registering user");
 
         var (success, errorMessage) = await DBHelper.UserDB.Add(registeredUser);
@@ -368,7 +369,7 @@ class ClientHandler
         if(!success)
             return Helper.ErrorCmd(this, cmd, errorMessage);
 
-        LogManager.AddLog($"{newStatus.ToString() ?? "Denied/removed"} all {oldStatus} friends", this);
+        LogManager.AddLog($"{newStatus?.ToString() ?? "Denied/removed"} all {oldStatus} friends", this);
         return new(cmd.CommandType, null);
     }
 
@@ -421,6 +422,7 @@ class ClientHandler
         if(partner == null)
             return (Helper.ErrorCmd(this, cmd, errorMessage), null);
 
+        await DBHelper.MessageDB.SetReadPrivate(mainUser.UserID, partner.UserID);
         LogManager.AddLog($"Messaging {partner}", this);
         Server.JoinPrivate(this, mainUser.UserID, partner.UserID);
         return (new(cmd.CommandType, partner.Serialize()), partner);
@@ -441,7 +443,10 @@ class ClientHandler
 
     private async Task<Command> GetCreatedGroups(Command cmd)
     {
-        var (groups, errorMessage) = await DBHelper.ChatGroupDB.GetByCreator(Convert.ToInt32(cmd.Payload));
+        if(mainUser == null)
+            return Helper.ErrorCmd(this, cmd, "Invalid mainUser data");
+
+        var (groups, errorMessage) = await DBHelper.ChatGroupDB.GetByCreator(mainUser.UserID);
 
         if(groups == null)
             return Helper.ErrorCmd(this, cmd, errorMessage);

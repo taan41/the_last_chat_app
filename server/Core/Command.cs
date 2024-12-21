@@ -8,12 +8,13 @@ enum CommandType
     ChangeNickname, ChangePassword,
     GetFriendList, RemoveFriend,
     GetReceivedRq, AcceptFriendRq, AcceptAllRq, DenyFriendRq, DenyAllRq,
-    GetUserList, SendFriendRq, BlockUser, UnblockUser, BlockAll,
+    GetAllUsers, SendFriendRq, BlockUser, UnblockUser, BlockAll,
     SetPartner, GetPartnerHistory, RemovePartner,
     GetCreatedGroups, CreateGroup, ChangeGroupName, DeleteGroup,
-    GetSubcribed, RemoveSubcribed, GetGroupList, SubcribeToGroup,
+    GetSubcribed, RemoveSubcribed, GetAllGroups, SubcribeToGroup,
     JoinGroup, GetGroupInfo, GetGroupHistory, LeaveGroup,
-    Message, EchoMessage, NoticePrivateMsg, SendFile,
+    Message, EchoMessage, NoticePrivateMsg,
+    SendFile, AcceptFile,
     Disconnect
 }
 

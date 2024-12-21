@@ -99,10 +99,10 @@ static class DBHelper
                 CREATE TABLE ChatGroups (
                     GroupID INT AUTO_INCREMENT PRIMARY KEY,
                     GroupName VARCHAR({MagicNum.groupNameMax}) NOT NULL,
-                    CreatorID INT NOT NULL,
+                    CreatorID INT DEFAULT NULL,
                     CreatedTime TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     OnlineCount INT NOT NULL,
-                    FOREIGN KEY (CreatorID) REFERENCES Users(UserID) ON DELETE SET -1,
+                    FOREIGN KEY (CreatorID) REFERENCES Users(UserID) ON DELETE SET NULL,
                     INDEX idx_groupID (GroupID)
                 )", conn))
             {
@@ -216,7 +216,6 @@ static class DBHelper
                 cmd.Parameters.AddWithValue("@nickname", userToAdd.Nickname);
                 cmd.Parameters.AddWithValue("@pwdHash", userToAdd.PwdSet.PwdHash);
                 cmd.Parameters.AddWithValue("@salt", userToAdd.PwdSet.Salt);
-                cmd.Parameters.AddWithValue("@onlineStatus", userToAdd.OnlineStatus);
 
                 await cmd.ExecuteNonQueryAsync();
 
@@ -263,7 +262,6 @@ static class DBHelper
                     UserID = reader.GetInt32("UserID"),
                     Username = reader.GetString("Username"),
                     Nickname = reader.GetString("Nickname"),
-                    OnlineStatus = reader.GetBoolean("OnlineStatus"),
                     PwdSet = pwdSet
                 }, "");
             }
@@ -310,7 +308,6 @@ static class DBHelper
                     UserID = reader.GetInt32("UserID"),
                     Username = reader.GetString("Username"),
                     Nickname = reader.GetString("Nickname"),
-                    OnlineStatus = reader.GetBoolean("OnlineStatus"),
                     PwdSet = pwdSet
                 }, "");
             }
@@ -356,7 +353,6 @@ static class DBHelper
                         UserID = reader.GetInt32("UserID"),
                         Username = reader.GetString("Username"),
                         Nickname = reader.GetString("Nickname"),
-                        OnlineStatus = reader.GetBoolean("OnlineStatus"),
                         PwdSet = pwdSet
                     });
                 }
@@ -578,12 +574,12 @@ static class DBHelper
 
             string query =
                 @"SELECT
-                    u.UserID as PendingID,
+                    u.UserID,
                     u.Username,
-                    u.Nickname,
+                    u.Nickname
                 FROM Users u
                 JOIN Friends f ON u.UserID = f.SenderID AND f.FriendStatus = @pending
-                WHERE m.ReceiverID = @mainUserID";
+                WHERE f.ReceiverID = @mainUserID";
 
             List<User> pendingUsers = [];
             
@@ -601,7 +597,7 @@ static class DBHelper
                 {
                     pendingUsers.Add(new()
                     {
-                        UserID = reader.GetInt32("PendingID"),
+                        UserID = reader.GetInt32("UserID"),
                         Username = reader.GetString("Username"),
                         Nickname = reader.GetString("Nickname"),
                     });
@@ -615,7 +611,7 @@ static class DBHelper
             }
         }
 
-        public static async Task<(List<(User friend, int unreadCount)>? friends, string errorMessage)> GetFriends(int mainUserID)
+        public static async Task<(List<Friend>? friends, string errorMessage)> GetFriends(int mainUserID)
         {
             if (mainUserID < 1)
                 return (null, "Invalid user ID");
@@ -626,14 +622,22 @@ static class DBHelper
                     u.Username,
                     u.Nickname,
                     u.OnlineStatus,
-                    Count(*) as UnreadCount
-                FROM Users u
-                JOIN PrivateMessages m ON u.UserID = m.SenderID AND m.ReadStatus = FALSE
-                JOIN Friends f ON (u.UserID = f.SenderID OR u.UserID = f.ReceiverID) AND f.FriendStatus = @confirmed
-                WHERE m.ReceiverID = @mainUserID
-                GROUP BY FriendID";
+                    Count(m.MessageID) as UnreadCount
+                FROM
+					Users u
+                LEFT JOIN
+					PrivateMessages m ON u.UserID = m.SenderID AND m.ReceiverID = 1 AND m.ReadStatus = FALSE
+                JOIN
+					Friends f ON
+						(u.UserID = f.SenderID OR u.UserID = f.ReceiverID)
+                        AND (f.ReceiverID = @mainUserID OR f.SenderID = @mainUserID)
+                        AND f.FriendStatus = @confirmed
+                WHERE
+					 u.UserID != @mainUserID
+                GROUP BY
+					u.UserID";
 
-            List<(User, int)> friends = [];
+            List<Friend> friends = [];
             
             try
             {
@@ -652,9 +656,8 @@ static class DBHelper
                         UserID = reader.GetInt32("FriendID"),
                         Username = reader.GetString("Username"),
                         Nickname = reader.GetString("Nickname"),
-                        OnlineStatus = reader.GetBoolean("OnlineStatus"),
                         PwdSet = null,
-                    }, reader.GetInt32("UnreadCount")));
+                    },  reader.GetBoolean("OnlineStatus"), reader.GetInt32("UnreadCount")));
                 }
 
                 return (friends, "");
@@ -672,6 +675,7 @@ static class DBHelper
         public static async Task<(bool success, string errorMessage)> Add(ChatGroup chatGroup)
         {
             string createQuery = "INSERT INTO ChatGroups (GroupName, CreatorID, OnlineCount) VALUES (@groupName, @creatorID, @onlineCount)";
+            string getQuery = "SELECT GroupID FROM ChatGroups WHERE GroupName = @groupName AND CreatorID = @creatorID ORDER BY CreatedTime DESC";
             string subcribeQuery = "INSERT INTO GroupMembers (GroupID, MemberID) VALUES (@groupID, @memberID)";
 
             try
@@ -686,8 +690,16 @@ static class DBHelper
 
                 await createCmd.ExecuteNonQueryAsync();
 
+                using MySqlCommand getCmd = new(getQuery, conn);
+                getCmd.Parameters.AddWithValue("@groupName", chatGroup.GroupName);
+                getCmd.Parameters.AddWithValue("@creatorID", chatGroup.CreatorID);
+
+                int? groupID = (int?) await getCmd.ExecuteScalarAsync();
+                if (groupID == null)
+                    return (false, "Invalid groupID of just created group");
+
                 using MySqlCommand subcribeCmd = new(subcribeQuery, conn);
-                subcribeCmd.Parameters.AddWithValue("@groupID", chatGroup.GroupID);
+                subcribeCmd.Parameters.AddWithValue("@groupID", groupID);
                 subcribeCmd.Parameters.AddWithValue("@memberID", chatGroup.CreatorID);
 
                 await subcribeCmd.ExecuteNonQueryAsync();

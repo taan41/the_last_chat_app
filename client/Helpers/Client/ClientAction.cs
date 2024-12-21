@@ -21,7 +21,7 @@ static class ClientAction
             WriteLine(" < Press ESC to cancel >");
 
             Write(" Enter username: ");
-            string? username = ClientHelper.InputData("Username", MagicNum.nicknameMin, MagicNum.nicknameMax, false);
+            string? username = ClientHelper.InputData("Username", MagicNum.usernameMin, MagicNum.nicknameMax, false);
             if (username == null)
                 return;
 
@@ -279,13 +279,13 @@ static class ClientAction
         return null;
     }
 
-    public static List<(User friend, int unread)>? GetFriendList(NetworkStream stream, ref byte[] buffer)
+    public static List<Friend>? GetFriendList(NetworkStream stream, ref byte[] buffer)
     {
         Command cmdToSend = new(CommandType.GetFriendList, null);
 
         if (ClientHelper.SendCmd(stream, ref buffer, cmdToSend, out Command receivedCmd))
         {
-            var friends = JsonSerializer.Deserialize<List<(User, int)>>(receivedCmd.Payload);
+            var friends = JsonSerializer.Deserialize<List<Friend>>(receivedCmd.Payload);
 
             if (friends == null)
             {
@@ -299,7 +299,7 @@ static class ClientAction
         return null;
     }
 
-    public static void SetPartner(NetworkStream stream, ref byte[] buffer, List<(User friend, int)> friends, int mainUserID, out User? partner)
+    public static void SetPartner(NetworkStream stream, ref byte[] buffer, List<Friend> friends, int mainUserID, out User? partner)
     {
         partner = null;
     
@@ -317,7 +317,7 @@ static class ClientAction
         {
             partnerID = Convert.ToInt32(partnerIDString);
 
-            if(!friends.Any(item => item.friend.UserID == partnerID))
+            if(!friends.Any(friend => friend.BaseUser.UserID == partnerID))
                 throw new FormatException();
         }
         catch (FormatException)
@@ -327,7 +327,7 @@ static class ClientAction
             return;
         }
 
-        if(partnerID == mainUserID)
+        if (partnerID == mainUserID)
         {
             WriteLine(" Error: Can't message to self");
             ReadKey(true);
@@ -346,7 +346,7 @@ static class ClientAction
         }
     }
 
-    public static void RemoveFriend(NetworkStream stream, ref byte[] buffer, List<(User friend, int)> friends)
+    public static void RemoveFriend(NetworkStream stream, ref byte[] buffer, List<Friend> friends)
     {
         IOHelper.WriteBorder();
         WriteLine(" < Press ESC to cancel >");
@@ -359,12 +359,13 @@ static class ClientAction
         {
             friendID = Convert.ToInt32(friendIDString);
 
-            if(!friends.Any(item => item.friend.UserID == friendID))
+            if(!friends.Any(friend => friend.BaseUser.UserID == friendID))
                 throw new FormatException();
         }
         catch (FormatException)
         {
             WriteLine(" Error: Invalid ID");
+            ReadKey(true);
             return;
         }
 
@@ -394,6 +395,7 @@ static class ClientAction
             catch (FormatException)
             {
                 WriteLine(" Error: Invalid ID");
+                ReadKey(true);
                 return;
             }
         }
@@ -402,7 +404,7 @@ static class ClientAction
         ClientHelper.SendCmd(stream, ref buffer, cmdToSend, out _);
     }
 
-    public static void SendRequest(NetworkStream stream, ref byte[] buffer)
+    public static void SendRequest(NetworkStream stream, ref byte[] buffer, int mainUserID)
     {
         int? userID = null;
         IOHelper.WriteBorder();
@@ -418,13 +420,23 @@ static class ClientAction
         catch (FormatException)
         {
             WriteLine(" Error: Invalid ID");
+            ReadKey(true);
             return;
         }
+
+        if (userID == mainUserID)
+        {
+            WriteLine(" Error: Can't send request to self");
+            ReadKey(true);
+            return;
+        }
+        
 
         Command cmdToSend = new(CommandType.SendFriendRq, userID?.ToString());
         if(ClientHelper.SendCmd(stream, ref buffer, cmdToSend, out _))
         {
-            WriteLine("Send friend request successfully");
+            IOHelper.WriteBorder();
+            WriteLine(" Send friend request successfully");
             ReadKey(true);
         }
     }
@@ -468,6 +480,7 @@ static class ClientAction
         catch (FormatException)
         {
             WriteLine(" Error: Invalid ID");
+            ReadKey(true);
             return;
         }
 
@@ -730,7 +743,6 @@ static class ClientAction
             {
                 stopTokenSource.Cancel();
                 stopTokenSource.Dispose();
-                return;
             }
             
             if (string.IsNullOrWhiteSpace(content))
@@ -756,7 +768,7 @@ static class ClientAction
                         }
                         else if (partner != null)
                         {
-                            WriteNotice($"\n[Client] Partner's info: '{partner.Info(false, true, true)}'", prompt);
+                            WriteNotice($"[Client] Partner's info: '{partner.Info(false, true)}'", prompt);
                         }
                         continue;
 

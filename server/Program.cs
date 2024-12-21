@@ -415,4 +415,12 @@ class Server
             chatHandlers.Find(handler => handler is GroupChatHandler groupHandler && groupHandler.GetGroup.GroupID == groupID)?.Dispose();
         }
     }
+
+    public static void DisposeClient(ClientHandler client)
+    {
+        lock(clientHanlders)
+        {
+            clientHanlders.Remove(client);
+        }
+    }
 }

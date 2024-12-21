@@ -8,7 +8,6 @@ class User
     public string Username { get; set; } = "";
     public string Nickname { get; set; } = "";
     public PasswordSet? PwdSet { get; set; }
-    public bool OnlineStatus { get; set; } = false;
 
     public User() {}
 
@@ -23,15 +22,11 @@ class User
     public override string ToString()
         => $"User(ID:{UserID})";
 
-    public string Info(bool showUsername, bool showNickname, bool showOnline)
+    public string Info(bool showUsername, bool showNickname)
     {
-        List<string> info = [];
-        if (showUsername) info.Add($" Username: {Username}");
-        if (showNickname) info.Add($" Nickname: {Nickname}");
-
         StringBuilder sb = new($"[ID: {UserID}]");
-        sb.AppendJoin(',', info);
-        if (showOnline) sb.Append($" ({(OnlineStatus ? "Online" : "Offline")})");
+        if (showUsername) sb.Append($" Username: {Username}");
+        if (showNickname) sb.Append($" Nickname: {Nickname}");
         return sb.ToString();
     }
 
