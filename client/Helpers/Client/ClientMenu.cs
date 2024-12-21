@@ -12,6 +12,7 @@ static class ClientMenu
         WriteLine(" 1. Connect to server");
         WriteLine(" 2. Change IP");
         WriteLine(" 3. Change port");
+        WriteLine(" 4. Save folder");
         WriteLine(" 0. Shut down client");
         IOHelper.WriteBorder();
         Write(" Enter Choice: ");
@@ -23,6 +24,7 @@ static class ClientMenu
         IOHelper.WriteHeader("Zelo");
         WriteLine(" 1. Login");
         WriteLine(" 2. Register");
+        WriteLine(" 3. Save folder");
         WriteLine(" 0. Shut down client");
         IOHelper.WriteBorder();
         Write(" Enter Choice: ");
@@ -38,7 +40,7 @@ static class ClientMenu
         WriteLine(" 2. Change password");
         WriteLine(" 3. Friends");
         WriteLine(" 4. Chat groups");
-        WriteLine(" 5. File folder");
+        WriteLine(" 5. Save folder");
         WriteLine(" 0. Logout");
         IOHelper.WriteBorder();
         Write(" Enter Choice: ");
@@ -48,11 +50,13 @@ static class ClientMenu
     {
         Clear();
         IOHelper.WriteHeader("Zelo");
-        WriteLine($" Friend list (Page {curPage + 1}/{(friends.Count - 1) / 10 + 1}):");
-
-        foreach(var friend in friends.GetRange(curPage * 10, Math.Min(friends.Count - curPage * 10, 10)))
+        if (friends.Count == 0)
+            WriteLine(" No friend");
+        else
         {
-            WriteLine($" • {friend.Info()}");
+            WriteLine($" Friend list (Page {curPage + 1}/{(friends.Count - 1) / 10 + 1}):");
+            foreach(var friend in friends.GetRange(curPage * 10, Math.Min(friends.Count - curPage * 10, 10)))
+                WriteLine($" • {friend.Info()}");
         }
 
         IOHelper.WriteBorder();
@@ -72,11 +76,13 @@ static class ClientMenu
     {
         Clear();
         IOHelper.WriteHeader("Zelo");
-        WriteLine($" Received requests from users (Page {curPage + 1}/{(users.Count - 1) / 10 + 1}):");
-
-        foreach(var user in users.GetRange(curPage * 10, Math.Min(users.Count - curPage * 10, 10)))
+        if (users.Count == 0)
+            WriteLine(" No friend request received");
+        else
         {
-            WriteLine($" • {user.Info(false, true)}");
+            WriteLine($" Received requests from users (Page {curPage + 1}/{(users.Count - 1) / 10 + 1}):");
+            foreach(var user in users.GetRange(curPage * 10, Math.Min(users.Count - curPage * 10, 10)))
+                WriteLine($" • {user.Info(false, true)}");
         }
 
         IOHelper.WriteBorder();
@@ -98,17 +104,19 @@ static class ClientMenu
     {
         Clear();
         IOHelper.WriteHeader("Zelo");
-        WriteLine($" Registered user list (Page {curPage + 1}/{(users.Count - 1) / 10 + 1}):");
-
-        foreach(var user in users.GetRange(curPage * 10, Math.Min(users.Count - curPage * 10, 10)))
+        if (users.Count == 0)
+            WriteLine(" No registered user");
+        else
         {
-            WriteLine($" • {user.Info(false, true)}");
+            WriteLine($" Registered user list (Page {curPage + 1}/{(users.Count - 1) / 10 + 1}):");
+            foreach(var user in users.GetRange(curPage * 10, Math.Min(users.Count - curPage * 10, 10)))
+                WriteLine($" • {user.Info(false, true)}");
         }
 
         IOHelper.WriteBorder();
         WriteLine(" 1. Send friend request");
         // WriteLine(" 2. View sent requests");
-        // WriteLine(" 3. Block");
+        WriteLine(" 3. Block");
         WriteLine(" 7. Refresh list");
         WriteLine(" 8. Previous page");
         WriteLine(" 9. Next page");
@@ -121,12 +129,13 @@ static class ClientMenu
     {
         Clear();
         IOHelper.WriteHeader("Zelo");
-        WriteLine($" Subscribed chat groups (Page {curPage + 1}/{(subcribed.Count - 1) / 10 + 1}):");
-        IOHelper.WriteBorder();
-
-        foreach(var group in subcribed.GetRange(curPage * 10, Math.Min(subcribed.Count - curPage * 10, 10)))
+        if (subcribed.Count == 0)
+            WriteLine(" No subcribed group");
+        else
         {
-            WriteLine($" • {group.Info(true, true)}");
+            WriteLine($" Subscribed chat groups (Page {curPage + 1}/{(subcribed.Count - 1) / 10 + 1}):");
+            foreach(var group in subcribed.GetRange(curPage * 10, Math.Min(subcribed.Count - curPage * 10, 10)))
+                WriteLine($" • {group.Info(true, true)}");
         }
 
         IOHelper.WriteBorder();
@@ -146,12 +155,13 @@ static class ClientMenu
     {
         Clear();
         IOHelper.WriteHeader("Zelo");
-        WriteLine($" All chat groups (Page {curPage + 1}/{(groups.Count - 1) / 10 + 1}):");
-        IOHelper.WriteBorder();
-
-        foreach(var group in groups.GetRange(curPage * 10, Math.Min(groups.Count - curPage * 10, 10)))
+        if (groups.Count == 0)
+            WriteLine(" No existing chat group");
+        else
         {
-            WriteLine($" • {group.Info(true, false)}");
+            WriteLine($" All chat groups (Page {curPage + 1}/{(groups.Count - 1) / 10 + 1}):");
+            foreach(var group in groups.GetRange(curPage * 10, Math.Min(groups.Count - curPage * 10, 10)))
+                WriteLine($" • {group.Info(true, false)}");
         }
 
         IOHelper.WriteBorder();
@@ -168,12 +178,13 @@ static class ClientMenu
     {
         Clear();
         IOHelper.WriteHeader("Zelo");
-        WriteLine($" Created chat groups (Page {curPage + 1}/{(groups.Count - 1) / 10 + 1}):");
-        IOHelper.WriteBorder();
-
-        foreach(var group in groups.GetRange(curPage * 10, Math.Min(groups.Count - curPage * 10, 10)))
+        if (groups.Count == 0)
+            WriteLine(" No created chat group");
+        else
         {
-            WriteLine($" • {group.Info(true, false)}");
+            WriteLine($" Created chat groups (Page {curPage + 1}/{(groups.Count - 1) / 10 + 1}):");
+            foreach(var group in groups.GetRange(curPage * 10, Math.Min(groups.Count - curPage * 10, 10)))
+                WriteLine($" • {group.Info(true, false)}");
         }
 
         IOHelper.WriteBorder();
@@ -187,42 +198,43 @@ static class ClientMenu
         Write(" Enter Choice: ");
     }
 
-    public static void FileFolder(string curPath)
+    public static void File(List<string> files, int curPage)
     {
         Clear();
         IOHelper.WriteHeader("Zelo");
-        WriteLine(" Current file folder:");
-        WriteLine($" {curPath}");
-        IOHelper.WriteBorder();
-        WriteLine(" 1. View files in folder");
-        WriteLine(" 2. Change folder");
-        WriteLine(" 3. Revert to default folder");
-        WriteLine(" 0. Return");
-        IOHelper.WriteBorder();
-        Write(" Enter choice: ");
-    }
-
-    public static void ViewFile(List<string> files, int curPage)
-    {
-        Clear();
-        IOHelper.WriteHeader("Zelo");
-        WriteLine($" File list (Page {curPage + 1}/{(files.Count - 1) / 10 + 1}):");
-        IOHelper.WriteBorder();
-
-        foreach(var file in files.GetRange(curPage * 10, Math.Min(files.Count - curPage * 10, 10)))
+        if (files.Count == 0)
+            WriteLine(" Folder is empty");
+        else
         {
-            WriteLine($" • {file}");
+            WriteLine($" File list (Page {curPage + 1}/{(files.Count - 1) / 10 + 1}):");
+            for (int i = 0; i < Math.Min(files.Count - curPage * 10, 10); i++)
+                WriteLine($" {i}. {Path.GetFileName(files[i])}");
         }
 
         IOHelper.WriteBorder();
         WriteLine(" 1. Open");
         WriteLine(" 2. Delete");
         WriteLine(" 3. Change file's name");
+        WriteLine(" 4. Change folder");
         WriteLine(" 8. Previous page");
         WriteLine(" 9. Next page");
         WriteLine(" 0. Return");
         IOHelper.WriteBorder();
         Write(" Enter Choice: ");
+    }
+
+    public static void FileFolder(string curPath)
+    {
+        Clear();
+        IOHelper.WriteHeader("Zelo");
+        WriteLine(" Current save folder:");
+        WriteLine($" {curPath}");
+        IOHelper.WriteBorder();
+        WriteLine(" 1. Change folder");
+        WriteLine(" 2. Revert to default folder");
+        WriteLine(" 0. Return");
+        IOHelper.WriteBorder();
+        Write(" Enter choice: ");
     }
 
     public static void ChatCommands()

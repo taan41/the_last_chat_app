@@ -626,7 +626,7 @@ static class DBHelper
                 FROM
 					Users u
                 LEFT JOIN
-					PrivateMessages m ON u.UserID = m.SenderID AND m.ReceiverID = 1 AND m.ReadStatus = FALSE
+					PrivateMessages m ON u.UserID = m.SenderID AND m.ReceiverID = @mainUserID AND m.ReadStatus = FALSE
                 JOIN
 					Friends f ON
 						(u.UserID = f.SenderID OR u.UserID = f.ReceiverID)
@@ -1153,17 +1153,22 @@ static class DBHelper
         {
             string query = 
                 @"SELECT
-                    gm.SentTime,
+                    m.SentTime,
                     u.Nickname,
-                    gm.Content
-                FROM GroupMessages gm
-                JOIN Users u ON gm.SenderId = u.UserId
-                JOIN Friends f ON
-                    gm.SenderID = f.SenderID
-                    AND f.ReceiverID = @mainUserID
-                    AND f.FriendStatus != @blocked
-                WHERE gm.GroupID = @groupID
-                ORDER BY gm.SentTime";
+                    m.Content
+                FROM
+                    GroupMessages m
+                JOIN
+                    Users u ON m.SenderId = u.UserId
+                JOIN LEFT
+                    Friends f ON
+                        m.SenderID = f.SenderID
+                        AND f.ReceiverID = @mainUserID
+                        AND f.FriendStatus != @blocked
+                WHERE
+                    m.GroupID = @groupID
+                ORDER BY
+                    m.SentTime";
 
             List<Message> messages = [];
 

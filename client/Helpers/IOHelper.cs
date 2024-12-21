@@ -217,7 +217,6 @@ static class IOHelper
         sb.Insert(index, copiedText?[.. Math.Min(copiedText.Length, limit - sb.Length)]);
 
         Write(sb.ToString()[index ..]);
-        MoveCursor(index - sb.Length);
     }
 
     private static void HandleDefaultKey(StringBuilder sb, ref int index, char keyChar, int startCursorLeft, bool intercept)

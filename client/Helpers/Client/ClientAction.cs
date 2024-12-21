@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
@@ -185,6 +186,7 @@ static class ClientAction
         if (user.PwdSet == null)
         {
             WriteLine(" Error: Null PasswordSet");
+            ReadKey(true);
             return;
         }
 
@@ -353,6 +355,8 @@ static class ClientAction
 
         Write(" Enter friend's ID: ");
         string? friendIDString = ClientHelper.InputData("ID", 0, null, false);
+        if (friendIDString == null)
+            return;
 
         int friendID;
         try
@@ -384,6 +388,8 @@ static class ClientAction
 
             Write(" Enter user's ID: ");
             string? userIDString = ClientHelper.InputData("ID", 0, null, false);
+            if (userIDString == null)
+                return;
 
             try
             {
@@ -406,12 +412,14 @@ static class ClientAction
 
     public static void SendRequest(NetworkStream stream, ref byte[] buffer, int mainUserID)
     {
-        int? userID = null;
+        int? userID;
         IOHelper.WriteBorder();
         WriteLine(" < Press ESC to cancel >");
 
         Write(" Enter user's ID: ");
         string? userIDString = ClientHelper.InputData("ID", 0, null, false);
+        if (userIDString == null)
+            return;
 
         try
         {
@@ -432,11 +440,50 @@ static class ClientAction
         }
         
 
-        Command cmdToSend = new(CommandType.SendFriendRq, userID?.ToString());
+        Command cmdToSend = new(CommandType.SendFriendRq, userID.ToString());
         if(ClientHelper.SendCmd(stream, ref buffer, cmdToSend, out _))
         {
             IOHelper.WriteBorder();
-            WriteLine(" Send friend request successfully");
+            WriteLine(" Sent friend request successfully");
+            ReadKey(true);
+        }
+    }
+
+    public static void BlockUser(NetworkStream stream, ref byte[] buffer, int mainUserID)
+    {
+        int? userID;
+        IOHelper.WriteBorder();
+        WriteLine(" < Press ESC to cancel >");
+
+        Write(" Enter user's ID: ");
+        string? userIDString = ClientHelper.InputData("ID", 0, null, false);
+        if (userIDString == null)
+            return;
+
+        try
+        {
+            userID = Convert.ToInt32(userIDString);
+        }
+        catch (FormatException)
+        {
+            WriteLine(" Error: Invalid ID");
+            ReadKey(true);
+            return;
+        }
+
+        if (userID == mainUserID)
+        {
+            WriteLine(" Error: Can't block self");
+            ReadKey(true);
+            return;
+        }
+        
+
+        Command cmdToSend = new(CommandType.BlockUser, userID.ToString());
+        if(ClientHelper.SendCmd(stream, ref buffer, cmdToSend, out _))
+        {
+            IOHelper.WriteBorder();
+            WriteLine(" Blocked user successfully");
             ReadKey(true);
         }
     }
@@ -468,6 +515,8 @@ static class ClientAction
 
         Write(" Enter chat group ID: ");
         string? groupIDString = ClientHelper.InputData("ID", 0, null, false);
+        if (groupIDString == null)
+            return;
         
         int groupID;
         try
@@ -500,6 +549,8 @@ static class ClientAction
 
         Write(" Enter chat group ID: ");
         string? groupIDString = ClientHelper.InputData("ID", 0, null, false);
+        if (groupIDString == null)
+            return;
 
         int groupID;
         try
@@ -512,6 +563,7 @@ static class ClientAction
         catch (FormatException)
         {
             WriteLine(" Error: Invalid ID");
+            ReadKey(true);
             return;
         }
 
@@ -560,6 +612,8 @@ static class ClientAction
 
         Write(" Enter chat group ID: ");
         string? groupIDString = ClientHelper.InputData("ID", 0, null, false);
+        if (groupIDString == null)
+            return;
 
         int groupID;
 
@@ -573,6 +627,7 @@ static class ClientAction
         catch (FormatException)
         {
             WriteLine(" Error: Invalid ID");
+            ReadKey(true);
             return;
         }
 
@@ -604,8 +659,10 @@ static class ClientAction
 
         Write(" Enter chat group ID: ");
         string? groupIDString = ClientHelper.InputData("ID", 0, null, false);
-        int groupID;
+        if (groupIDString == null)
+            return;
 
+        int groupID;
         try
         {
             groupID = Convert.ToInt32(groupIDString);
@@ -619,6 +676,7 @@ static class ClientAction
         catch (FormatException)
         {
             WriteLine(" Error: Invalid ID");
+            ReadKey(true);
             return;
         }
 
@@ -628,6 +686,125 @@ static class ClientAction
             WriteLine(" Deleted chat group successfully!");
             ReadKey(true);
         }
+    }
+
+    public static void OpenDelFile(string dirPath, List<string> files, bool open)
+    {
+        if (files.Count == 0)
+            return;
+
+        IOHelper.WriteBorder();
+        WriteLine(" < Press ESC to cancel >");
+
+        Write(" Enter file's index: ");
+        string? fileIndexString = IOHelper.ReadInput(false);
+        if (fileIndexString == null)
+            return;
+
+        int fileIndex;
+        try
+        {
+            fileIndex = Convert.ToInt32(fileIndexString);
+            
+            if(fileIndex < 0 || fileIndex >= files.Count)
+                throw new FormatException();
+        }
+        catch (FormatException)
+        {
+            WriteLine(" Error: Invalid index");
+            ReadKey(true);
+            return;
+        }
+
+        string filePath = files[fileIndex];
+
+        if (open)
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = filePath,
+                UseShellExecute = true
+            });
+        else if (File.Exists(filePath))
+            File.Delete(filePath);
+    }
+
+    public static void ChangeFileName(string dirPath, List<string> files)
+    {
+        if (files.Count == 0)
+            return;
+
+        IOHelper.WriteBorder();
+        WriteLine(" < Press ESC to cancel >");
+
+        Write(" Enter file's index: ");
+        string? fileIndexString = IOHelper.ReadInput(false);
+        if (fileIndexString == null)
+            return;
+
+        int fileIndex;
+        try
+        {
+            fileIndex = Convert.ToInt32(fileIndexString);
+            
+            if(fileIndex < 0 || fileIndex >= files.Count)
+                throw new FormatException();
+        }
+        catch (FormatException)
+        {
+            WriteLine(" Error: Invalid index");
+            ReadKey(true);
+            return;
+        }
+
+        Write(" Enter file's new name (without extension): ");
+        string? fileName = IOHelper.ReadInput(false);
+        if (fileName == null)
+            return;
+            
+        fileName += Path.GetExtension(files[fileIndex]);
+
+        if (File.Exists(dirPath + fileName))
+        {
+            WriteLine(" Error: File with same name already exists");
+            ReadKey(true);
+        }
+        else
+            File.Move(files[fileIndex], dirPath + fileName);
+    }
+
+    public static void ChangeFolder(ref string curFolder)
+    {
+        IOHelper.WriteBorder();
+        WriteLine(" < Press ESC to cancel >");
+
+        Write(" Enter file's index: ");
+        string? newFolder = IOHelper.ReadInput(false);
+        if (newFolder == null)
+            return;
+
+        if (!Path.Exists(newFolder))
+        {
+            WriteLine(" Error: Folder does not exist");
+            WriteLine(" Do you want to create folder? (Y/N): ");
+            if(IOHelper.ReadConfirm() ?? false)
+            {
+                Directory.CreateDirectory(newFolder);
+                curFolder = newFolder;
+                IOHelper.WriteBorder();
+                WriteLine(" Changed save folder successfully");
+            }
+            else
+                WriteLine(" Failed to change save folder");
+            ReadKey(true);
+        }
+        else
+        {
+            curFolder = newFolder;
+            IOHelper.WriteBorder();
+            WriteLine(" Changed save folder successfully");
+            ReadKey(true);
+        }
+
     }
 
     private static readonly StringBuilder inputBuffer = new(MagicNum.inputLimit);
@@ -743,6 +920,7 @@ static class ClientAction
             {
                 stopTokenSource.Cancel();
                 stopTokenSource.Dispose();
+                return;
             }
             
             if (string.IsNullOrWhiteSpace(content))

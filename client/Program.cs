@@ -1,22 +1,23 @@
-using System.ComponentModel.DataAnnotations;
+using System.Diagnostics;
 using System.Net.Sockets;
-using System.Security.Cryptography;
-using System.Text.Json;
 
 using static System.Console;
 
 class Client
 {
     const string defaultIP =
-        "127.0.0.1";        // localhost IP
+        // "127.0.0.1";        // localhost IP
         // "192.168.0.105"; // wifi (?) IP
-        // "26.244.97.115"; // tan Radmin IP
+        "26.244.97.115"; // tan Radmin IP
     const int defaultPort = 5000;
 
     public static void Main()
     {
         string serverIP = defaultIP;
         int port = defaultPort;
+
+        string defaultFolder = Environment.CurrentDirectory + @"\ZeloFiles\";
+        Directory.CreateDirectory(defaultFolder);
 
         while (true)
         {
@@ -103,6 +104,10 @@ class Client
                     }
                     continue;
 
+                case "4":
+                    FileMenu();
+                    continue;
+
                 case "0": case null:
                     WriteLine(" Shutting down client...");
                     stopProgram = true;
@@ -134,6 +139,10 @@ class Client
 
                 case "2":
                     ClientAction.Register(stream, ref buffer);
+                    continue;
+
+                case "3":
+                    FileMenu();
                     continue;
 
                 case "0": case null:
@@ -175,6 +184,7 @@ class Client
                     continue;
 
                 case "5":
+                    FileMenu();
                     continue;
 
                 case "0": case null:
@@ -337,6 +347,10 @@ class Client
             {
                 case "1":
                     ClientAction.SendRequest(stream, ref buffer, mainUser.UserID);
+                    continue;
+
+                case "2":
+                    ClientAction.BlockUser(stream, ref buffer, mainUser.UserID);
                     continue;
 
                 case "7":
@@ -506,6 +520,82 @@ class Client
                 case "9":
                     if (curPage < (groups.Count - 1) / 10)
                         curPage++;
+                    continue;
+
+                case "0": case null:
+                    return;
+
+                default:
+                    continue;
+            }
+        }
+    }
+
+    static void FileMenu()
+    {
+        string defaultFolder = Environment.CurrentDirectory + @"\ZeloFiles\", curFolder = defaultFolder;
+        Directory.CreateDirectory(defaultFolder);
+
+        List<string> files;
+
+        int curPage = 0;
+        while (true)
+        {
+            files = [.. Directory.GetFiles(curFolder)];
+
+            ClientMenu.File(files, curPage);
+
+            switch (IOHelper.ReadInput(false))
+            {
+                case "1":
+                    ClientAction.OpenDelFile(curFolder, files, true);
+                    continue;
+
+                case "2":
+                    ClientAction.OpenDelFile(curFolder, files, false);
+                    continue;
+
+                case "3":
+                    ClientAction.ChangeFileName(curFolder, files);
+                    continue;
+
+                case "4":
+                    FileFolderMenu(defaultFolder, ref curFolder);
+                    continue;
+
+                case "8":
+                    if (curPage > 0)
+                        curPage--;
+                    continue;
+
+                case "9":
+                    if (curPage < (files.Count - 1) / 10)
+                        curPage++;
+                    continue;
+
+                case "0": case null:
+                    return;
+
+                default:
+                    continue;
+            }
+        }
+    }
+    
+    static void FileFolderMenu(string defFolder, ref string curFolder)
+    {
+        while (true)
+        {
+            ClientMenu.FileFolder(curFolder);
+
+            switch (IOHelper.ReadInput(false))
+            {
+                case "1":
+                    ClientAction.ChangeFolder(ref curFolder);
+                    continue;
+
+                case "2":
+                    curFolder = defFolder;
                     continue;
 
                 case "0": case null:
