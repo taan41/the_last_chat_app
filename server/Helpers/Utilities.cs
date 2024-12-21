@@ -13,14 +13,6 @@ static class MagicNum
         bufferSize = 2048;
 }
 
-static class FriendStatus
-{
-    public const string
-        pending = "Pending",
-        confirmed = "Confirmed",
-        blocked = "Blocked";
-}
-
 static class Utilities
 {
     // UTF-16 encoding methods

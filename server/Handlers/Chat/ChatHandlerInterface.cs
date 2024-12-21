@@ -15,7 +15,6 @@ abstract class ChatHandler
 
     public abstract void EchoCmd(Command cmd, ClientHandler sourceClient);
 
-
     public virtual void AddClient(ClientHandler client)
     {
         client.SetUpGroupHandler(this);

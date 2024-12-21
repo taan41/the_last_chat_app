@@ -1,8 +1,19 @@
 using System.Data;
 using System.Text;
 using MySql.Data.MySqlClient;
-using Org.BouncyCastle.Asn1.Cmp;
-using Org.BouncyCastle.Asn1.Cms;
+
+enum FriendStatus
+{
+    Pending, Confirmed, Blocked
+}
+
+static class FriendStatusOld
+{
+    public const string
+        pending = "Pending",
+        confirmed = "Confirmed",
+        blocked = "Blocked";
+}
 
 static class DBHelper
 {
@@ -73,7 +84,7 @@ static class DBHelper
                     FriendID INT AUTO_INCREMENT PRIMARY KEY,
                     SenderID INT NOT NULL,
                     ReceiverID INT NOT NULL,
-                    ConfirmStatus VARCHAR(10) NOT NULL,
+                    FriendStatus VARCHAR(10) NOT NULL,
                     FOREIGN KEY (SenderID) REFERENCES Users(UserID) ON DELETE CASCADE,
                     FOREIGN KEY (ReceiverID) REFERENCES Users(UserID) ON DELETE CASCADE,
                     UNIQUE (SenderID, ReceiverID),
@@ -88,10 +99,10 @@ static class DBHelper
                 CREATE TABLE ChatGroups (
                     GroupID INT AUTO_INCREMENT PRIMARY KEY,
                     GroupName VARCHAR({MagicNum.groupNameMax}) NOT NULL,
-                    CreatorID INT DEFAULT NULL,
+                    CreatorID INT NOT NULL,
                     CreatedTime TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     OnlineCount INT NOT NULL,
-                    FOREIGN KEY (CreatorID) REFERENCES Users(UserID) ON DELETE SET NULL,
+                    FOREIGN KEY (CreatorID) REFERENCES Users(UserID) ON DELETE SET -1,
                     INDEX idx_groupID (GroupID)
                 )", conn))
             {
@@ -106,6 +117,7 @@ static class DBHelper
                     JoinedTime TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (GroupID) REFERENCES ChatGroups(GroupID) ON DELETE CASCADE,
                     FOREIGN KEY (MemberID) REFERENCES Users(UserID) ON DELETE CASCADE,
+                    UNIQUE (GroupID, MemberID),
                     INDEX idx_group (GroupID),
                     INDEX idx_member (MemberID)
                 )", conn))
@@ -429,9 +441,9 @@ static class DBHelper
 
     public class FriendsDB
     {
-        public static async Task<(bool success, string errorMessage)> SendRequest(int senderID, int receiverID)
+        public static async Task<(bool success, string errorMessage)> Add(int senderID, int receiverID, FriendStatus status)
         {
-            string query = "INSERT INTO Friends (SenderID, ReceiverID, ConfirmStatus) VALUES (@senderID, @receiverID, @pending)";
+            string query = "INSERT INTO Friends (SenderID, ReceiverID, FriendStatus) VALUES (@senderID, @receiverID, @status)";
 
             if (senderID < 1 || receiverID < 1)
                 return (false, "Invalid user ID");
@@ -444,7 +456,7 @@ static class DBHelper
                 using MySqlCommand cmd = new(query, conn);
                 cmd.Parameters.AddWithValue("@senderID", senderID);
                 cmd.Parameters.AddWithValue("@receiverID", receiverID);
-                cmd.Parameters.AddWithValue("@pending", FriendStatus.pending);
+                cmd.Parameters.AddWithValue("@status", status.ToString());
 
                 await cmd.ExecuteNonQueryAsync();
 
@@ -453,12 +465,113 @@ static class DBHelper
             catch (MySqlException ex)
             {
                 if (ex.ErrorCode == 1062)
-                    return (false, "Unable to send more request");
+                    return (false, "Unable to send (more) request");
                 return (false, ex.Message);
             }
         }
 
-        public static async Task<(List<User>? pendingUsers, string errorMessage)> GetPendingRequests(int mainUserID)
+        public static async Task<(bool success, string errorMessage)> Update(int senderID, int receiverID, FriendStatus? status)
+        {
+            if (senderID < 1 || receiverID < 1)
+                return (false, "Invalid user ID");
+
+            string query = status != null ?
+                "UPDATE Friends SET FriendStatus = @status WHERE SenderID = @senderID AND ReceiverID = @receiverID" :
+                @"DELETE FROM Friends
+                    WHERE (SenderID = @senderID AND ReceiverID = @receiverID)
+                    OR (SenderID = @receiverID AND ReceiverID = @senderID AND FriendStatus = @confirmed)";
+
+            try
+            {
+                using MySqlConnection conn = new(connectionString);
+                await conn.OpenAsync();
+
+                using MySqlCommand cmd = new(query, conn);
+                cmd.Parameters.AddWithValue("@senderID", senderID);
+                cmd.Parameters.AddWithValue("@receiverID", receiverID);
+                if (status != null)
+                    cmd.Parameters.AddWithValue("@status", status.ToString());
+                else
+                    cmd.Parameters.AddWithValue("@confirmed", FriendStatus.Confirmed.ToString());
+
+                await cmd.ExecuteNonQueryAsync();
+
+                return (true, "");
+            }
+            catch (MySqlException ex)
+            {
+                return (false, ex.Message);
+            }
+        }
+
+        public static async Task<(bool success, string errorMessage)> UpdateAll(int receiverID, FriendStatus oldStatus, FriendStatus? newStatus)
+        {
+            if (receiverID < 1)
+                return (false, "Invalid user ID");
+
+            string query = newStatus != null ?
+                "UPDATE Friends SET FriendStatus = @newStatus WHERE ReceiverID = @receiverID AND FriendStatus = @oldStatus" :
+                "DELETE FROM Friends WHERE ReceiverID = @receiverID AND FriendStatus = @oldStatus";
+
+            try
+            {
+                using MySqlConnection conn = new(connectionString);
+                await conn.OpenAsync();
+
+                using MySqlCommand cmd = new(query, conn);
+                cmd.Parameters.AddWithValue("@receiverID", receiverID);
+                cmd.Parameters.AddWithValue("@oldStatus", oldStatus.ToString());
+                if (newStatus != null) cmd.Parameters.AddWithValue("@status", newStatus.ToString());
+
+                await cmd.ExecuteNonQueryAsync();
+
+                return (true, "");
+            }
+            catch (MySqlException ex)
+            {
+                return (false, ex.Message);
+            }
+        }
+
+        public static async Task<(bool success, string errorMessage)> Block(int mainUserID, int blockedID)
+        {
+            if (blockedID < 1 || mainUserID < 1)
+                return (false, "Invalid user ID");
+
+            string delQuery =
+                @"DELETE FROM Friends
+                WHERE (SenderID = @mainUserID AND ReceiverID = @blockedID)
+                OR (SenderID = @blockedID AND ReceiverID = @mainUserID)";
+
+            string blockQuery = "INSERT INTO Friends (SenderID, ReceiverID, FriendStatus) VALUES (@senderID, @receiverID, @blocked)";
+
+            try
+            {
+                using MySqlConnection conn = new(connectionString);
+                await conn.OpenAsync();
+
+                using MySqlCommand delCmd = new(delQuery, conn);
+                delCmd.Parameters.AddWithValue("@mainUserID", mainUserID);
+                delCmd.Parameters.AddWithValue("@blockedID", blockedID);
+
+                await delCmd.ExecuteNonQueryAsync();
+
+                using MySqlCommand blockCmd = new(blockQuery, conn);
+                blockCmd.Parameters.AddWithValue("@senderID", blockedID);
+                blockCmd.Parameters.AddWithValue("@receiverID", mainUserID);
+                blockCmd.Parameters.AddWithValue("@blocked", FriendStatus.Blocked.ToString());
+
+                await blockCmd.ExecuteNonQueryAsync();
+
+                return (true, "");
+            }
+            catch (MySqlException ex)
+            {
+                return (false, ex.Message);
+            }
+        }
+
+        public static async Task<(List<User>? pendingUsers, string errorMessage)> GetPendingRq(int mainUserID)
         {
             if (mainUserID < 1)
                 return (null, "Invalid user ID");
@@ -469,7 +582,7 @@ static class DBHelper
                     u.Username,
                     u.Nickname,
                 FROM Users u
-                JOIN Friends f ON u.UserID = f.SenderID AND f.ConfirmStatus = @pending
+                JOIN Friends f ON u.UserID = f.SenderID AND f.FriendStatus = @pending
                 WHERE m.ReceiverID = @mainUserID";
 
             List<User> pendingUsers = [];
@@ -481,7 +594,7 @@ static class DBHelper
 
                 using MySqlCommand cmd = new(query, conn);
                 cmd.Parameters.AddWithValue("@mainUserID", mainUserID);
-                cmd.Parameters.AddWithValue("@pending", FriendStatus.pending);
+                cmd.Parameters.AddWithValue("@pending", FriendStatus.Pending.ToString());
                 
                 using var reader = await cmd.ExecuteReaderAsync();
                 while (await reader.ReadAsync())
@@ -502,76 +615,6 @@ static class DBHelper
             }
         }
 
-        public static async Task<(bool success, string errorMessage)> ProcessRequest(int senderID, int receiverID, bool accept)
-        {
-            if (senderID < 1 || receiverID < 1)
-                return (false, "Invalid user ID");
-
-            string query = accept ?
-                "UPDATE Friends (SenderID, ReceiverID, ConfirmStatus) VALUES (@senderID, @receiverID, @confirmed)" :
-                "DELETE FROM Friends WHERE SenderID = @senderID AND ReceiverID = @receiverID";
-
-            try
-            {
-                using MySqlConnection conn = new(connectionString);
-                await conn.OpenAsync();
-
-                using MySqlCommand cmd = new(query, conn);
-                cmd.Parameters.AddWithValue("@senderID", senderID);
-                cmd.Parameters.AddWithValue("@receiverID", receiverID);
-                if (accept) cmd.Parameters.AddWithValue("@confirmed", FriendStatus.confirmed);
-
-                await cmd.ExecuteNonQueryAsync();
-
-                return (true, "");
-            }
-            catch (MySqlException ex)
-            {
-                return (false, ex.Message);
-            }
-        }
-
-        public static async Task<(bool success, string errorMessage)> BlockUser(int mainUserID, int blockedID, bool blocking)
-        {
-            if (blockedID < 1 || mainUserID < 1)
-                return (false, "Invalid user ID");
-
-            string delQuery =
-                @"DELETE FROM Friends
-                WHERE (SenderID = @mainUserID AND ReceiverID = @blockedID)
-                OR (SenderID = @blockedID AND ReceiverID = @mainUserID)";
-
-            string query = "INSERT INTO Friends (SenderID, ReceiverID, ConfirmStatus) VALUES (@senderID, @receiverID, @blocked)";
-
-            try
-            {
-                using MySqlConnection conn = new(connectionString);
-                await conn.OpenAsync();
-
-                using MySqlCommand delCmd = new(delQuery, conn);
-                delCmd.Parameters.AddWithValue("@mainUserID", mainUserID);
-                delCmd.Parameters.AddWithValue("@blockedID", blockedID);
-
-                await delCmd.ExecuteNonQueryAsync();
-
-                if (blocking)
-                {
-                    using MySqlCommand cmd = new(query, conn);
-                    cmd.Parameters.AddWithValue("@senderID", blockedID);
-                    cmd.Parameters.AddWithValue("@receiverID", mainUserID);
-                    cmd.Parameters.AddWithValue("@blocked", FriendStatus.blocked);
-
-                    await cmd.ExecuteNonQueryAsync();
-                }
-
-                return (true, "");
-            }
-            catch (MySqlException ex)
-            {
-                return (false, ex.Message);
-            }
-        }
-
         public static async Task<(List<(User friend, int unreadCount)>? friends, string errorMessage)> GetFriends(int mainUserID)
         {
             if (mainUserID < 1)
@@ -586,7 +629,7 @@ static class DBHelper
                     Count(*) as UnreadCount
                 FROM Users u
                 JOIN PrivateMessages m ON u.UserID = m.SenderID AND m.ReadStatus = FALSE
-                JOIN Friends f ON (u.UserID = f.SenderID OR u.UserID = f.ReceiverID) AND f.ConfirmStatus = @confirmed
+                JOIN Friends f ON (u.UserID = f.SenderID OR u.UserID = f.ReceiverID) AND f.FriendStatus = @confirmed
                 WHERE m.ReceiverID = @mainUserID
                 GROUP BY FriendID";
 
@@ -599,7 +642,7 @@ static class DBHelper
 
                 using MySqlCommand cmd = new(query, conn);
                 cmd.Parameters.AddWithValue("@mainUserID", mainUserID);
-                cmd.Parameters.AddWithValue("@confirmed", FriendStatus.confirmed);
+                cmd.Parameters.AddWithValue("@confirmed", FriendStatus.Confirmed.ToString());
                 
                 using var reader = await cmd.ExecuteReaderAsync();
                 while (await reader.ReadAsync())
@@ -628,7 +671,40 @@ static class DBHelper
     {
         public static async Task<(bool success, string errorMessage)> Add(ChatGroup chatGroup)
         {
-            string query = "INSERT INTO ChatGroups (GroupName, CreatorID, OnlineCount) VALUES (@groupName, @creatorID, @onlineCount)";
+            string createQuery = "INSERT INTO ChatGroups (GroupName, CreatorID, OnlineCount) VALUES (@groupName, @creatorID, @onlineCount)";
+            string subcribeQuery = "INSERT INTO GroupMembers (GroupID, MemberID) VALUES (@groupID, @memberID)";
+
+            try
+            {
+                using MySqlConnection conn = new(connectionString);
+                await conn.OpenAsync();
+
+                using MySqlCommand createCmd = new(createQuery, conn);
+                createCmd.Parameters.AddWithValue("@groupName", chatGroup.GroupName);
+                createCmd.Parameters.AddWithValue("@creatorID", chatGroup.CreatorID);
+                createCmd.Parameters.AddWithValue("@onlineCount", chatGroup.OnlineCount);
+
+                await createCmd.ExecuteNonQueryAsync();
+
+                using MySqlCommand subcribeCmd = new(subcribeQuery, conn);
+                subcribeCmd.Parameters.AddWithValue("@groupID", chatGroup.GroupID);
+                subcribeCmd.Parameters.AddWithValue("@memberID", chatGroup.CreatorID);
+
+                await subcribeCmd.ExecuteNonQueryAsync();
+
+                return (true, "");
+            }
+            catch (MySqlException ex)
+            {
+                return (false, ex.Message);
+            }
+        }
+
+        public static async Task<(bool success, string errorMessage)> SubUnsub(int groupID, int userID, bool subcribing)
+        {
+            string query = subcribing ? 
+                "INSERT INTO GroupMembers (GroupID, MemberID) VALUES (@groupID, @memberID)" :
+                "DELETE FROM GroupMembers WHERE GroupID = @groupID AND MemberID = @memberID";
 
             try
             {
@@ -636,9 +712,8 @@ static class DBHelper
                 await conn.OpenAsync();
 
                 using MySqlCommand cmd = new(query, conn);
-                cmd.Parameters.AddWithValue("@groupName", chatGroup.GroupName);
-                cmd.Parameters.AddWithValue("@creatorID", chatGroup.CreatorID);
-                cmd.Parameters.AddWithValue("@onlineCount", chatGroup.OnlineCount);
+                cmd.Parameters.AddWithValue("@groupID", groupID);
+                cmd.Parameters.AddWithValue("@memberID", userID);
 
                 await cmd.ExecuteNonQueryAsync();
 
@@ -702,13 +777,61 @@ static class DBHelper
                     {
                         GroupName = reader.GetString("GroupName"),
                         GroupID = reader.GetInt32("GroupID"),
-                        CreatorID = reader.IsDBNull(reader.GetOrdinal("CreatorID")) ? null : reader.GetInt32("CreatorID"),
+                        CreatorID = reader.IsDBNull("CreatorID") ? null : reader.GetInt32("CreatorID"),
                         CreatedTime = reader.GetDateTime("CreatedTime"),
                         OnlineCount = reader.GetInt32("OnlineCount")
                     });
                 }
 
                 return (groups, "");
+            }
+            catch (MySqlException ex)
+            {
+                return (null, ex.Message);
+            }
+        }
+        
+        public static async Task<(List<ChatGroup>? groups, string errorMessage)> GetSubcribed(int userID)
+        {
+            if (userID < 1)
+                return (null, "Invalid creator ID");
+
+            string query =
+                @"SELECT 
+                    g.GroupID,
+                    g.GroupName,
+                    g.CreatorID,
+                    g.CreatedTime,
+                    g.OnlineCount
+                FROM GroupMembers gm
+                JOIN ChatGroups g ON gm.GroupID = g.GroupID
+                WHERE gm.MemberID = @memberID
+                ORDER BY g.GroupID";
+
+            List<ChatGroup> subcribedGroups = [];
+            
+            try
+            {
+                using MySqlConnection conn = new(connectionString);
+                await conn.OpenAsync();
+
+                using MySqlCommand cmd = new(query, conn);
+                cmd.Parameters.AddWithValue("@memberID", userID);
+                
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    subcribedGroups.Add(new()
+                    {
+                        GroupName = reader.GetString("GroupName"),
+                        GroupID = reader.GetInt32("GroupID"),
+                        CreatorID = reader.IsDBNull("CreatorID") ? null : reader.GetInt32("CreatorID"),
+                        CreatedTime = reader.GetDateTime("CreatedTime"),
+                        OnlineCount = reader.GetInt32("OnlineCount")
+                    });
+                }
+
+                return (subcribedGroups, "");
             }
             catch (MySqlException ex)
             {
@@ -1014,17 +1137,21 @@ static class DBHelper
             }
         }
 
-        public static async Task<(List<Message>? requestedMsgList, string errorMessage)> GetHistoryGroup(int groupID)
+        public static async Task<(List<Message>? requestedMsgList, string errorMessage)> GetHistoryGroup(int groupID, int mainUserID)
         {
             string query = 
                 @"SELECT
-                    m.SentTime,
+                    gm.SentTime,
                     u.Nickname,
-                    m.Content
-                FROM GroupMessages m
-                JOIN Users u ON m.SenderId = u.UserId
-                WHERE m.GroupID = @groupID
-                ORDER BY m.SentTime";
+                    gm.Content
+                FROM GroupMessages gm
+                JOIN Users u ON gm.SenderId = u.UserId
+                JOIN Friends f ON
+                    gm.SenderID = f.SenderID
+                    AND f.ReceiverID = @mainUserID
+                    AND f.FriendStatus != @blocked
+                WHERE gm.GroupID = @groupID
+                ORDER BY gm.SentTime";
 
             List<Message> messages = [];
 
@@ -1034,6 +1161,8 @@ static class DBHelper
                 await conn.OpenAsync();
 
                 using MySqlCommand cmd = new(query, conn);
+                cmd.Parameters.AddWithValue("@mainUserID", mainUserID);
+                cmd.Parameters.AddWithValue("@blocked", FriendStatus.Blocked.ToString());
                 cmd.Parameters.AddWithValue("@groupID", groupID);
                 
                 using var reader = await cmd.ExecuteReaderAsync();

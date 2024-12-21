@@ -41,7 +41,7 @@ class Server
                 CancellationTokenSource serverStopToken = new();
                 _ = Task.Run(() => AcceptClientsAsync(server, serverStopToken.Token));
 
-                ServerControl(serverIP, port);
+                await ServerControl(serverIP, port);
 
                 serverStopToken.Cancel();
                 server.Stop();
@@ -196,7 +196,7 @@ class Server
         }
     }
 
-    static void ServerControl(string? serverIP, int port)
+    static async Task ServerControl(string? serverIP, int port)
     {
         while(true)
         {
@@ -222,6 +222,7 @@ class Server
                 case "0": case null:
                     Command shutDownCmd = new(CommandType.Disconnect, null);
                     clientHanlders.ForEach(client => client.EchoCmd(shutDownCmd, CancellationToken.None));
+                    await DBHelper.UserDB.SetAllOffline();
                     WriteLine(" Shutting down server...");
                     ReadKey(true);
                     return;

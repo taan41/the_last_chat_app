@@ -78,9 +78,47 @@ class ClientHandler
                     case CommandType.ChangePassword:
                         cmdToSend = await ChangePassword(receivedCmd);
                         break;
+
+                    case CommandType.GetFriendList:
+                        cmdToSend = await GetFriendList(receivedCmd);
+                        break;
+                    
+                    case CommandType.RemoveFriend:
+                    case CommandType.DenyFriendRq:
+                    case CommandType.UnblockUser:
+                        cmdToSend = await UpdateFriend(receivedCmd, null);
+                        break;
+                        
+                    case CommandType.GetReceivedRq:
+                        cmdToSend = await GetPendingRq(receivedCmd);
+                        break;
+                        
+                    case CommandType.AcceptFriendRq:
+                        cmdToSend = await UpdateFriend(receivedCmd, FriendStatus.Confirmed);
+                        break;
+
+                    case CommandType.AcceptAllRq:
+                        cmdToSend = await UpdateAllFriend(receivedCmd, FriendStatus.Pending, FriendStatus.Confirmed);
+                        break;
+
+                    case CommandType.DenyAllRq:
+                        cmdToSend = await UpdateAllFriend(receivedCmd, FriendStatus.Pending, null);
+                        break;
+
+                    case CommandType.BlockAll:
+                        cmdToSend = await UpdateAllFriend(receivedCmd, FriendStatus.Pending, FriendStatus.Blocked);
+                        break;
                         
                     case CommandType.GetUserList:
                         cmdToSend = await GetUserList(receivedCmd);
+                        break;
+
+                    case CommandType.SendFriendRq:
+                        cmdToSend = await UpdateFriend(receivedCmd, FriendStatus.Pending);
+                        break;
+
+                    case CommandType.BlockUser:
+                        cmdToSend = await BlockUser(receivedCmd);
                         break;
 
                     case CommandType.SetPartner:
@@ -104,12 +142,32 @@ class ClientHandler
                         cmdToSend = await CreateGroup(receivedCmd);
                         break;
 
+                    case CommandType.ChangeGroupName:
+                        cmdToSend = await ChangeGroupName(receivedCmd);
+                        break;
+
                     case CommandType.DeleteGroup:
                         cmdToSend = await DeleteGroup(receivedCmd);
                         break;
 
+                    case CommandType.GetSubcribed:
+                        cmdToSend = await GetSubcribedGroups(receivedCmd);
+                        break;
+
+                    case CommandType.RemoveSubcribed:
+                        cmdToSend = await SubUnsubToGroup(receivedCmd, false);
+                        break;
+
                     case CommandType.GetGroupList:
                         cmdToSend = await GetAllGroupList(receivedCmd);
+                        break;
+
+                    case CommandType.SubcribeToGroup:
+                        cmdToSend = await SubUnsubToGroup(receivedCmd, true);
+                        break;
+
+                    case CommandType.JoinGroup:
+                        cmdToSend = await JoinGroup(receivedCmd);
                         break;
 
                     case CommandType.GetGroupInfo:
@@ -118,10 +176,6 @@ class ClientHandler
 
                     case CommandType.GetGroupHistory:
                         cmdToSend = await GetGroupHistory(receivedCmd);
-                        break;
-
-                    case CommandType.JoinGroup:
-                        cmdToSend = await JoinGroup(receivedCmd);
                         break;
 
                     case CommandType.LeaveGroup:
@@ -137,7 +191,7 @@ class ClientHandler
                         return;
 
                     default:
-                        cmdToSend = Helper.ClientErrorCmd(this, new(CommandType.Error, null), "Received invalid cmd");
+                        cmdToSend = Helper.ErrorCmd(this, new(CommandType.Error, null), "Received invalid cmd");
                         break;
                 }
 
@@ -175,7 +229,7 @@ class ClientHandler
         var (success, errorMessage) = await DBHelper.UserDB.CheckUsername(cmd.Payload);
 
         if(!success)
-            return Helper.ClientErrorCmd(this, cmd, errorMessage);
+            return Helper.ErrorCmd(this, cmd, errorMessage);
 
         return new(cmd.CommandType, null);
     }
@@ -184,13 +238,13 @@ class ClientHandler
     {
         User? registeredUser = User.Deserialize(cmd.Payload);
 
-        if(registeredUser == null)
-            return Helper.ClientErrorCmd(this, cmd, "Invalid registering user");
+        if(registeredUser == null || registeredUser.UserID < 1)
+            return Helper.ErrorCmd(this, cmd, "Invalid registering user");
 
         var (success, errorMessage) = await DBHelper.UserDB.Add(registeredUser);
 
         if(!success)
-            return Helper.ClientErrorCmd(this, cmd, errorMessage);
+            return Helper.ErrorCmd(this, cmd, errorMessage);
 
         LogManager.AddLog($"Registered Username '{registeredUser.Username}'", this);
         return new(cmd.CommandType, null);
@@ -201,10 +255,10 @@ class ClientHandler
         var (requestedUser, errorMessage) = await DBHelper.UserDB.Get(cmd.Payload, true);
 
         if(requestedUser == null)
-            return (Helper.ClientErrorCmd(this, cmd, errorMessage), null);
+            return (Helper.ErrorCmd(this, cmd, errorMessage), null);
 
         if(requestedUser.PwdSet == null)
-            return (Helper.ClientErrorCmd(this, cmd, "No password found"), null);
+            return (Helper.ErrorCmd(this, cmd, "No password found"), null);
 
         return (new(cmd.CommandType, requestedUser.PwdSet.Serialize()), requestedUser);
     }
@@ -212,12 +266,12 @@ class ClientHandler
     private async Task<Command> Login(Command cmd, User? tempUser)
     {
         if(mainUser != null || tempUser == null)
-            return Helper.ClientErrorCmd(this, cmd, "Invalid mainUser/tempUser");
+            return Helper.ErrorCmd(this, cmd, "Invalid mainUser/tempUser");
 
         var (success, errorMessage) = await DBHelper.UserDB.Update(tempUser.UserID, null, true, null);
 
         if(!success)
-            return Helper.ClientErrorCmd(this, cmd, errorMessage);
+            return Helper.ErrorCmd(this, cmd, errorMessage);
 
         mainUser = tempUser;
         LogManager.AddLog($"Logged in as {mainUser}", endPoint);
@@ -226,13 +280,13 @@ class ClientHandler
 
     private async Task<Command> Logout(Command cmd)
     {
-        if(mainUser == null)
-            return Helper.ClientErrorCmd(this, cmd, "Invalid mainUser");
+        if(mainUser == null || mainUser.UserID < 1)
+            return Helper.ErrorCmd(this, cmd, "Invalid mainUser");
 
         var (success, errorMessage) = await DBHelper.UserDB.Update(mainUser.UserID, null, false, null);
 
         if(!success)
-            return Helper.ClientErrorCmd(this, cmd, errorMessage);
+            return Helper.ErrorCmd(this, cmd, errorMessage);
 
         LogManager.AddLog($"Logged out from {mainUser}", endPoint);
         mainUser = null;
@@ -241,15 +295,15 @@ class ClientHandler
 
     private async Task<Command> ChangeNickname(Command cmd)
     {
-        if(mainUser == null)
-            return Helper.ClientErrorCmd(this, cmd, "Invalid mainUser");
+        if(mainUser == null || mainUser.UserID < 1)
+            return Helper.ErrorCmd(this, cmd, "Invalid mainUser");
 
         string newNickname = cmd.Payload;
 
         var (success, errorMessage) = await DBHelper.UserDB.Update(mainUser.UserID, newNickname, null, null);
 
         if(!success)
-            return Helper.ClientErrorCmd(this, cmd, errorMessage);
+            return Helper.ErrorCmd(this, cmd, errorMessage);
         
         LogManager.AddLog($"Changed nickname of {mainUser} from '{mainUser.Nickname}' to '{newNickname}'", this);
         mainUser.Nickname = newNickname;
@@ -258,19 +312,77 @@ class ClientHandler
 
     private async Task<Command> ChangePassword(Command cmd)
     {
-        if(mainUser == null)
-            return Helper.ClientErrorCmd(this, cmd, "Invalid mainUser");
+        if(mainUser == null || mainUser.UserID < 1)
+            return Helper.ErrorCmd(this, cmd, "Invalid mainUser");
 
         var newPwd = PasswordSet.Deserialize(cmd.Payload);
 
         var (success, errorMessage) = await DBHelper.UserDB.Update(mainUser.UserID, null, null, newPwd);
 
         if(!success)
-            return Helper.ClientErrorCmd(this, cmd, errorMessage);
+            return Helper.ErrorCmd(this, cmd, errorMessage);
         
         LogManager.AddLog($"Changed password of {mainUser}", this);
         mainUser.PwdSet = newPwd;
         return new(cmd.CommandType, null);
+    }
+
+    private async Task<Command> GetFriendList(Command cmd)
+    {
+        if(mainUser == null || mainUser.UserID < 1)
+            return Helper.ErrorCmd(this, cmd, "Invalid mainUser");
+
+        var (friends, errorMessage) = await DBHelper.FriendsDB.GetFriends(mainUser.UserID);
+
+        if(friends == null)
+            return Helper.ErrorCmd(this, cmd, errorMessage);
+        
+        return new(cmd.CommandType, JsonSerializer.Serialize(friends));
+    }
+
+    private async Task<Command> UpdateFriend(Command cmd, FriendStatus? status)
+    {
+        if(mainUser == null || mainUser.UserID < 1)
+            return Helper.ErrorCmd(this, cmd, "Invalid mainUser");
+
+        int otherID = Convert.ToInt32(cmd.Payload);
+
+        var (success, errorMessage) = status == FriendStatus.Pending ?
+            await DBHelper.FriendsDB.Add(mainUser.UserID, otherID, FriendStatus.Pending) :
+            await DBHelper.FriendsDB.Update(otherID, mainUser.UserID, status);
+
+        if(!success)
+            return Helper.ErrorCmd(this, cmd, errorMessage);
+
+        LogManager.AddLog($"{status.ToString() ?? "Denied/removed"} friend (UserID: {otherID})", this);
+        return new(cmd.CommandType, null);
+    }
+
+    private async Task<Command> UpdateAllFriend(Command cmd, FriendStatus oldStatus, FriendStatus? newStatus)
+    {
+        if(mainUser == null || mainUser.UserID < 1)
+            return Helper.ErrorCmd(this, cmd, "Invalid mainUser");
+
+        var (success, errorMessage) = await DBHelper.FriendsDB.UpdateAll(mainUser.UserID, oldStatus, newStatus);
+
+        if(!success)
+            return Helper.ErrorCmd(this, cmd, errorMessage);
+
+        LogManager.AddLog($"{newStatus.ToString() ?? "Denied/removed"} all {oldStatus} friends", this);
+        return new(cmd.CommandType, null);
+    }
+
+    private async Task<Command> GetPendingRq(Command cmd)
+    {
+        if(mainUser == null || mainUser.UserID < 1)
+            return Helper.ErrorCmd(this, cmd, "Invalid mainUser");
+
+        var (friends, errorMessage) = await DBHelper.FriendsDB.GetPendingRq(mainUser.UserID);
+
+        if(friends == null)
+            return Helper.ErrorCmd(this, cmd, errorMessage);
+        
+        return new(cmd.CommandType, JsonSerializer.Serialize(friends));
     }
 
     private async Task<Command> GetUserList(Command cmd)
@@ -278,20 +390,36 @@ class ClientHandler
         var (users, errorMessage) = await DBHelper.UserDB.GetAll(false);
 
         if(users == null)
-            return Helper.ClientErrorCmd(this, cmd, errorMessage);
+            return Helper.ErrorCmd(this, cmd, errorMessage);
         
         return new(cmd.CommandType, JsonSerializer.Serialize(users));
     }
 
+    private async Task<Command> BlockUser(Command cmd)
+    {
+        if(mainUser == null || mainUser.UserID < 1)
+            return Helper.ErrorCmd(this, cmd, "Invalid mainUser");
+
+        int otherID = Convert.ToInt32(cmd.Payload);
+
+        var (success, errorMessage) = await DBHelper.FriendsDB.Block(mainUser.UserID, otherID);
+
+        if(!success)
+            return Helper.ErrorCmd(this, cmd, errorMessage);
+
+        LogManager.AddLog($"Blocked (UserID: {otherID})", this);
+        return new(cmd.CommandType, null);
+    }
+
     private async Task<(Command, User?)> SetPartner(Command cmd)
     {
-        if(mainUser == null || mainUser.UserID == -1)
-            return (Helper.ClientErrorCmd(this, cmd, "Invalid mainUser"), null);
+        if(mainUser == null || mainUser.UserID < 1)
+            return (Helper.ErrorCmd(this, cmd, "Invalid mainUser"), null);
 
         var (partner, errorMessage) = await DBHelper.UserDB.Get(Convert.ToInt32(cmd.Payload), false);
 
         if(partner == null)
-            return (Helper.ClientErrorCmd(this, cmd, errorMessage), null);
+            return (Helper.ErrorCmd(this, cmd, errorMessage), null);
 
         LogManager.AddLog($"Messaging {partner}", this);
         Server.JoinPrivate(this, mainUser.UserID, partner.UserID);
@@ -301,12 +429,12 @@ class ClientHandler
     private async Task<Command> GetPartnerHistory(Command cmd)
     {
         if(mainUser == null || partner == null)
-            return Helper.ClientErrorCmd(this, cmd, "Invalid mainUser/partner data");
+            return Helper.ErrorCmd(this, cmd, "Invalid mainUser/partner data");
 
         var (messages, errorMessage) = await DBHelper.MessageDB.GetHistoryPrivate(mainUser.UserID, partner.UserID);
 
         if (messages == null)
-            return Helper.ClientErrorCmd(this, cmd, errorMessage);
+            return Helper.ErrorCmd(this, cmd, errorMessage);
 
         return new(cmd.CommandType, JsonSerializer.Serialize(messages));
     }
@@ -316,7 +444,7 @@ class ClientHandler
         var (groups, errorMessage) = await DBHelper.ChatGroupDB.GetByCreator(Convert.ToInt32(cmd.Payload));
 
         if(groups == null)
-            return Helper.ClientErrorCmd(this, cmd, errorMessage);
+            return Helper.ErrorCmd(this, cmd, errorMessage);
         
         return new(cmd.CommandType, JsonSerializer.Serialize(groups));
     }
@@ -326,39 +454,86 @@ class ClientHandler
         ChatGroup? chatGroup = ChatGroup.Deserialize(cmd.Payload);
 
         if(chatGroup == null)
-            return Helper.ClientErrorCmd(this, cmd, "Null chatGroup");
+            return Helper.ErrorCmd(this, cmd, "Null chatGroup");
 
         var (success, errorMessage) = await DBHelper.ChatGroupDB.Add(chatGroup);
 
         if(!success)
-            return Helper.ClientErrorCmd(this, cmd, errorMessage);
+            return Helper.ErrorCmd(this, cmd, errorMessage);
         
         LogManager.AddLog($"Created group '{chatGroup.GroupName}'", this);
         return new(cmd.CommandType, null);
     }
 
+    private async Task<Command> ChangeGroupName(Command cmd)
+    {
+        if (mainUser == null || mainUser.UserID < 1)
+            return Helper.ErrorCmd(this, cmd, "Invalid mainUser");
+
+        ChatGroup? groupToChange = ChatGroup.Deserialize(cmd.Payload);
+
+        if (groupToChange == null)
+            return Helper.ErrorCmd(this, cmd, "Invalid group data");
+
+        var (successs, errorMessage) = await DBHelper.ChatGroupDB.Update(groupToChange.GroupID, groupToChange.GroupName, null);
+
+        if(!successs)
+            return Helper.ErrorCmd(this, cmd, errorMessage);
+
+        LogManager.AddLog($"Changed name of {groupToChange} to '{groupToChange.GroupName}'", this);
+        return new(cmd.CommandType, null);
+    }
+
     private async Task<Command> DeleteGroup(Command cmd)
     {
-        if (mainUser == null)
-            return Helper.ClientErrorCmd(this, cmd, "Invalid mainUser");
+        if (mainUser == null || mainUser.UserID < 1)
+            return Helper.ErrorCmd(this, cmd, "Invalid mainUser");
 
         int groupID = Convert.ToInt32(cmd.Payload);
 
         var (groupToDel, errorMessage) = await DBHelper.ChatGroupDB.Get(groupID);
 
         if(groupToDel == null)
-            return Helper.ClientErrorCmd(this, cmd, errorMessage);
+            return Helper.ErrorCmd(this, cmd, errorMessage);
         
         if(groupToDel.CreatorID != mainUser.UserID)
-            return Helper.ClientErrorCmd(this, cmd, "Invalid ID");
+            return Helper.ErrorCmd(this, cmd, "Invalid ID");
 
         var (success, errorMessage2) = await DBHelper.ChatGroupDB.Delete(groupID);
 
         if(!success)
-            return Helper.ClientErrorCmd(this, cmd, errorMessage2);
+            return Helper.ErrorCmd(this, cmd, errorMessage2);
 
         Server.DisposeChat(groupID);
         LogManager.AddLog($"Deleted group {groupToDel}", this);
+        return new(cmd.CommandType, null);
+    }
+
+    private async Task<Command> GetSubcribedGroups(Command cmd)
+    {
+        if (mainUser == null || mainUser.UserID < 1)
+            return Helper.ErrorCmd(this, cmd, "Invalid mainUser");
+
+        var (subcribedGroups, errorMessage) = await DBHelper.ChatGroupDB.GetSubcribed(mainUser.UserID);
+
+        if(subcribedGroups == null)
+            return Helper.ErrorCmd(this, cmd, errorMessage);
+
+        return new(cmd.CommandType, JsonSerializer.Serialize(subcribedGroups));
+    }
+
+    private async Task<Command> SubUnsubToGroup(Command cmd, bool subcribing)
+    {
+        if (mainUser == null || mainUser.UserID < 1)
+            return Helper.ErrorCmd(this, cmd, "Invalid mainUser");
+
+        int groupID = Convert.ToInt32(cmd.Payload);
+            
+        var (success, errorMessage) = await DBHelper.ChatGroupDB.SubUnsub(groupID, mainUser.UserID, subcribing);
+
+        if(!success)
+            return Helper.ErrorCmd(this, cmd, errorMessage);
+
         return new(cmd.CommandType, null);
     }
 
@@ -367,7 +542,7 @@ class ClientHandler
         var (groups, errorMessage) = await DBHelper.ChatGroupDB.GetAll();
 
         if(groups == null)
-            return Helper.ClientErrorCmd(this, cmd, errorMessage);
+            return Helper.ErrorCmd(this, cmd, errorMessage);
 
         return new(cmd.CommandType, JsonSerializer.Serialize(groups));
     }
@@ -377,7 +552,7 @@ class ClientHandler
         var (groupToJoin, errorMessage) = await DBHelper.ChatGroupDB.Get(Convert.ToInt32(cmd.Payload));
 
         if (groupToJoin == null)
-            return Helper.ClientErrorCmd(this, cmd, errorMessage);
+            return Helper.ErrorCmd(this, cmd, errorMessage);
         
         LogManager.AddLog($"Connecting to {groupToJoin}", this);
         Server.JoinChatGroup(groupToJoin, this);
@@ -389,17 +564,20 @@ class ClientHandler
         var (requestedGroup, errorMessage) = await DBHelper.ChatGroupDB.Get(Convert.ToInt32(cmd.Payload));
 
         if (requestedGroup == null)
-            return Helper.ClientErrorCmd(this, cmd, errorMessage);
+            return Helper.ErrorCmd(this, cmd, errorMessage);
         
         return new(cmd.CommandType, requestedGroup.Serialize());
     }
 
     private async Task<Command> GetGroupHistory(Command cmd)
     {
-        var (messages, errorMessage) = await DBHelper.MessageDB.GetHistoryGroup(Convert.ToInt32(cmd.Payload));
+        if (mainUser == null || mainUser.UserID < 1)
+            return Helper.ErrorCmd(this, cmd, "Invalid mainUser");
+            
+        var (messages, errorMessage) = await DBHelper.MessageDB.GetHistoryGroup(Convert.ToInt32(cmd.Payload), mainUser.UserID);
 
         if (messages == null)
-            return Helper.ClientErrorCmd(this, cmd, errorMessage);
+            return Helper.ErrorCmd(this, cmd, errorMessage);
         
         return new(cmd.CommandType, JsonSerializer.Serialize(messages));
     }
@@ -417,12 +595,12 @@ class ClientHandler
     private Command ProcessMessage(Command cmd)
     {
         if (groupHandler == null)
-            return Helper.ClientErrorCmd(this, cmd, "Null groupHandler");
+            return Helper.ErrorCmd(this, cmd, "Null groupHandler");
 
         var message = Message.Deserialize(cmd.Payload);
 
         if (message == null)
-            return Helper.ClientErrorCmd(this, cmd, "Null message");
+            return Helper.ErrorCmd(this, cmd, "Null message");
 
         groupHandler.EchoMessage(message, this);
         return new();
@@ -434,9 +612,9 @@ class ClientHandler
         /// <summary>
         /// Set error command & log error based on 'errorMessage'
         /// </summary>
-        public static Command ClientErrorCmd(ClientHandler client, Command cmd, string errorDetail)
+        public static Command ErrorCmd(ClientHandler client, Command sourceCmd, string errorDetail)
         {
-            string logContent = $"Error: (Cmd: {cmd.Name()}) (Detail: {errorDetail})";
+            string logContent = $"Error: (Cmd: {sourceCmd.Name()}) (Detail: {errorDetail})";
 
             LogManager.AddLog(logContent, client);
             return new(CommandType.Error, errorDetail);
