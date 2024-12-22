@@ -3,9 +3,10 @@
 /test3
 /server/bin
 /server/obj
+/server/Files
 /client/bin
 /client/obj
-/server/bin
+/client/ZeloFiles
 the_last_chat_app.sln
 /.vscode
 .TODO

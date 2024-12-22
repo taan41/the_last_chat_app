@@ -186,6 +186,10 @@ class ClientHandler
                         cmdToSend = ProcessMessage(receivedCmd);
                         break;
 
+                    case CommandType.SendFile:
+                        cmdToSend = ReceiveFile(stream, receivedCmd);
+                        break;
+
                     case CommandType.Disconnect:
                         LogManager.AddLog($"Client disconnected", this);
                         return;
@@ -209,7 +213,8 @@ class ClientHandler
         }
         finally
         {
-            Server.DisposeClient(this);
+            groupHandler?.RemoveClient(this);
+            Server.RemoveClient(this);
             stream.Close();
             client.Close();
         }
@@ -223,6 +228,11 @@ class ClientHandler
     public async void EchoCmd(Command cmd, CancellationToken token)
     {
         await stream.WriteAsync(EncodeString(cmd.Serialize()), token);
+    }
+
+    public async void EchoByte(byte[] bytes, CancellationToken token)
+    {
+        await stream.WriteAsync(bytes, token);
     }
 
     private async Task<Command> CheckUsername(Command cmd)
@@ -609,6 +619,51 @@ class ClientHandler
 
         groupHandler.EchoMessage(message, this);
         return new();
+    }
+
+    private Command ReceiveFile(NetworkStream stream, Command cmd)
+    {
+        if (groupHandler == null)
+            return Helper.ErrorCmd(this, cmd, "Invalid groupHandler");
+
+        FileData? file = FileData.Deserialize(cmd.Payload);
+
+        if (file == null)
+            return Helper.ErrorCmd(this, cmd, "Invalid file data");
+
+        Command command = new(CommandType.SendFile, null);
+        int bytesRead = 0;
+        lock (stream)
+        {
+            byte[] fileBuffer = new byte[file.FileSize];
+            while (bytesRead < file.FileSize)
+                bytesRead += stream.Read(fileBuffer, bytesRead, file.FileSize - bytesRead);
+
+            command.Set(CommandType.DoneSendingFile, null);
+            stream.Write(EncodeString(command.Serialize()));
+            file.FileBytes = fileBuffer;
+        }
+
+        // Save file
+        // string savePath = Environment.CurrentDirectory + @$"\Files\{groupHandler}\";
+        // Directory.CreateDirectory(savePath);
+
+        // string filePath = savePath + file.FileName;
+        // string fileNameWOExt = Path.GetFileNameWithoutExtension(filePath);
+        // string fileExtension = Path.GetExtension(filePath);
+        // int counter = 1;
+        // while(File.Exists(filePath))
+        // {
+        //     string newFileName = $"{fileNameWOExt} ({counter}){fileExtension}";
+        //     filePath = Path.Combine(savePath, newFileName);
+        //     counter++;
+        // }
+        // await File.WriteAllBytesAsync(filePath, file.FileBytes);
+
+        LogManager.AddLog($"Sent file ({file.FileName}, {file.FileSize / 1024} KB) to {groupHandler}", this);
+        groupHandler.EchoFile(file, this);
+        command.Set(CommandType.Empty, null);
+        return command;
     }
 
 

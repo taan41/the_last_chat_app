@@ -215,7 +215,8 @@ static class ClientMenu
         WriteLine(" 1. Open");
         WriteLine(" 2. Delete");
         WriteLine(" 3. Change file's name");
-        WriteLine(" 4. Change folder");
+        WriteLine(" 4. Copy file's path");
+        WriteLine(" 5. Change folder");
         WriteLine(" 8. Previous page");
         WriteLine(" 9. Next page");
         WriteLine(" 0. Return");

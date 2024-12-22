@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
-
+using TextCopy;
 using static System.Console;
 using static Utilities;
 
@@ -688,7 +688,7 @@ static class ClientAction
         }
     }
 
-    public static void OpenDelFile(string dirPath, List<string> files, bool open)
+    public static void OpenDelCopyFile(string dirPath, List<string> files, int openDelCopy)
     {
         if (files.Count == 0)
             return;
@@ -718,14 +718,16 @@ static class ClientAction
 
         string filePath = files[fileIndex];
 
-        if (open)
+        if (openDelCopy == 1)
             Process.Start(new ProcessStartInfo
             {
                 FileName = filePath,
                 UseShellExecute = true
             });
-        else if (File.Exists(filePath))
+        else if (openDelCopy == 2 && File.Exists(filePath))
             File.Delete(filePath);
+        else if (openDelCopy == 3)
+            ClipboardService.SetText(filePath);
     }
 
     public static void ChangeFileName(string dirPath, List<string> files)
@@ -876,7 +878,7 @@ static class ClientAction
         WritePromt(prompt);
     }
 
-    public static void StartChatting(NetworkStream stream, User mainUser, User? partner, ChatGroup? joinedGroup)
+    public static void StartChatting(NetworkStream stream, User mainUser, User? partner, ChatGroup? joinedGroup, string savePath)
     {
         if(mainUser.UserID == -1 || (joinedGroup == null && partner == null))
         {
@@ -906,84 +908,142 @@ static class ClientAction
 
         CancellationTokenSource stopTokenSource = new();
 
-        Task echoMsg = Task.Run(() => EchoMessage(stream, prompt, stopTokenSource.Token));
+        Task echoMsg = Task.Run(() => EchoMessage(stream, prompt, savePath, stopTokenSource.Token));
         
         WriteMsgHistory();
         WritePromt(prompt);
 
-        while(true)
+        try
         {
-            inputBuffer.Clear();
-            content = IOHelper.ReadInput(inputBuffer, true, null, false);
-
-            if (echoMsg.IsCompleted || content == null)
+            while(true)
             {
-                stopTokenSource.Cancel();
-                stopTokenSource.Dispose();
-                return;
-            }
-            
-            if (string.IsNullOrWhiteSpace(content))
-                continue;
+                inputBuffer.Clear();
+                content = IOHelper.ReadInput(inputBuffer, true, null, false);
 
-            if (content.Trim().ElementAt(0) == '/')
-            {
-                switch(content.Split(' ').ElementAt(0))
+                if (echoMsg.IsCompleted || content == null)
                 {
-                    case "/help":
-                        IOHelper.MoveCursor(- prompt.Length - inputBuffer.Length - WindowWidth);
-                        WriteLine(new string(' ', WindowWidth - 1));
-                        WriteLine("[Client] All chat commands:");
-                        ClientMenu.ChatCommands();
-                        WritePromt(prompt);
-                        continue;
-
-                    case "/info":
-                        if (joinedGroup != null)
-                        {
-                            cmdToSend.Set(CommandType.GetGroupInfo, joinedGroup.GroupID.ToString());
-                            break;
-                        }
-                        else if (partner != null)
-                        {
-                            WriteNotice($"[Client] Partner's info: '{partner.Info(false, true)}'", prompt);
-                        }
-                        continue;
-
-                    case "/clear": case "/cls":
-                        Clear();
-                        WritePromt(prompt);
-                        continue;
-
-                    case "/reload":
-                        WriteMsgHistory();
-                        WritePromt(prompt);
-                        continue;
-
-                    case "/leave":
-                        stopTokenSource.Cancel();
-                        stopTokenSource.Dispose();
-                        return;
-                    
-                    default:
-                        WriteNotice("[Client] Unknown chat command", prompt);
-                        continue;
+                    stopTokenSource.Cancel();
+                    stopTokenSource.Dispose();
+                    return;
                 }
-            }
-            else
-            {
-                Message message = new(mainUser, partner, joinedGroup, content);
-                cmdToSend.Set(CommandType.Message, message.Serialize());
-                WriteMessage(message.Print(), prompt);
-                lock (msgHistory)
-                    msgHistory.Add(message);
-            }
+                
+                if (string.IsNullOrWhiteSpace(content))
+                    continue;
 
-            stream.Write(EncodeString(cmdToSend.Serialize()));
+                if (content.Trim().ElementAt(0) == '/')
+                {
+                    string chatCmd = content.Trim();
+                    int spaceIndex = chatCmd.IndexOf(' ');
+                    if (spaceIndex == -1) spaceIndex = chatCmd.Length;
+
+                    switch(chatCmd[..spaceIndex])
+                    {
+                        case "/help":
+                            IOHelper.MoveCursor(- prompt.Length - inputBuffer.Length - WindowWidth);
+                            WriteLine(new string(' ', WindowWidth - 1));
+                            WriteLine("[Client] All chat commands:");
+                            ClientMenu.ChatCommands();
+                            WritePromt(prompt);
+                            continue;
+
+                        case "/info":
+                            if (joinedGroup != null)
+                            {
+                                cmdToSend.Set(CommandType.GetGroupInfo, joinedGroup.GroupID.ToString());
+                                break;
+                            }
+                            else if (partner != null)
+                            {
+                                WriteNotice($"[Client] Partner's info: '{partner.Info(false, true)}'", prompt);
+                            }
+                            continue;
+
+                        case "/clear": case "/cls":
+                            Clear();
+                            WritePromt(prompt);
+                            continue;
+
+                        case "/reload":
+                            WriteMsgHistory();
+                            WritePromt(prompt);
+                            continue;
+
+                        case "/file":
+                            if (chatCmd.Length == spaceIndex)
+                                WriteNotice("[Client] Error: Invalid file path", prompt);
+                            else
+                            {
+                                string filePath = chatCmd[(spaceIndex + 1)..].Replace("\"", "");
+                                WriteNotice($"[Client] Start sending file {filePath}", prompt);
+
+                                if (SendFile(stream, filePath))
+                                    WriteNotice("[Client] Sent file successfully", prompt);
+                                else
+                                    WriteNotice("[Client] Failed to send file", prompt);
+                            }
+                            continue;
+
+                        case "/leave":
+                            stopTokenSource.Cancel();
+                            stopTokenSource.Dispose();
+                            return;
+                        
+                        default:
+                            WriteNotice("[Client] Error: Unknown chat command", prompt);
+                            continue;
+                    }
+                }
+                else
+                {
+                    Message message = new(mainUser, partner, joinedGroup, content);
+                    cmdToSend.Set(CommandType.Message, message.Serialize());
+                    WriteMessage(message.Print(), prompt);
+                    lock (msgHistory)
+                        msgHistory.Add(message);
+                }
+
+                stream.Write(EncodeString(cmdToSend.Serialize()));
+            }
+        }
+        catch (Exception ex)
+        {
+            WriteNotice($" Error: {ex}", prompt);
+            ClientHelper.SendDisconnect(stream);
         }
     }
 
-    public static async Task EchoMessage(NetworkStream stream, string prompt, CancellationToken stopToken)
+    private static bool doneSendingFile = false;
+    private static readonly string[] waitting = [
+        "Sending file.   ",
+        "Sending file..  ",
+        "Sending file... ",
+        "Sending file...."
+    ];
+
+    private static bool SendFile(NetworkStream stream, string filePath)
+    {
+        FileData fileToSend = new(Path.GetFileName(filePath), File.ReadAllBytes(filePath));
+        Command cmdToSend = new(CommandType.SendFile, fileToSend.Serialize());
+
+        lock (stream)
+        {
+            stream.Write(EncodeString(cmdToSend.Serialize()));
+            stream.Write(fileToSend.FileBytes);
+        }
+
+        int waitIndex = 1;
+        while(!doneSendingFile)
+        {
+            Write(waitting[waitIndex++]);
+            IOHelper.MoveCursor(-16);
+            waitIndex %= 4;
+            Task.Delay(500);
+        }
+
+        return true;
+    }
+
+    public static async Task EchoMessage(NetworkStream stream, string prompt, string savePath, CancellationToken stopToken)
     {
         byte[] buffer = new byte[MagicNum.bufferSize];
         int bytesRead, totalRead = 0;
@@ -1030,6 +1090,16 @@ static class ClientAction
                         WriteNotice($"[Client] Group info: '{requestedGroup?.Info(true, true)}'", prompt);
                         continue;
 
+                    case CommandType.DoneSendingFile:
+                        doneSendingFile = true;
+                        continue;
+
+                    case CommandType.SendFile:
+                        string? filePath = await ReceiveFile(stream, receivedCmd, savePath, stopToken);
+                        if (filePath != null)
+                            WriteNotice($"[Client] File received and saved as {Path.GetFileName(filePath)}", prompt);
+                        continue;
+
                     case CommandType.Disconnect:
                         WriteNotice("[Client] Server shut down", prompt);
                         return;
@@ -1052,5 +1122,32 @@ static class ClientAction
             // WriteLine(ex);
             ReadKey(true);
         }
+    }
+
+    private static async Task<string?> ReceiveFile(NetworkStream stream, Command cmd, string savePath, CancellationToken stopToken)
+    {
+        FileData? file = FileData.Deserialize(cmd.Payload);
+
+        if (file == null)
+            return null;
+
+        int bytesRead = 0;
+        byte[] fileBuffer = new byte[file.FileSize];
+        while (bytesRead < file.FileSize)
+            bytesRead += await stream.ReadAsync(fileBuffer, bytesRead, file.FileSize - bytesRead, stopToken);
+
+        // Save file
+        string filePath = savePath + file.FileName;
+        string fileNameWOExt = Path.GetFileNameWithoutExtension(filePath);
+        string fileExtension = Path.GetExtension(filePath);
+        int counter = 1;
+        while(File.Exists(filePath))
+        {
+            string newFileName = $"{fileNameWOExt} ({counter}){fileExtension}";
+            filePath = Path.Combine(savePath, newFileName);
+            counter++;
+        }
+        await File.WriteAllBytesAsync(filePath, fileBuffer, stopToken);
+        return filePath;
     }
 }

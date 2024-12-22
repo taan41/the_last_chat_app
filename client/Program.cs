@@ -11,13 +11,15 @@ class Client
         "26.244.97.115"; // tan Radmin IP
     const int defaultPort = 5000;
 
+    static readonly string defaultFolder = Environment.CurrentDirectory + @"\ZeloFiles\";
+    static string curFolder = defaultFolder;
+
     public static void Main()
     {
         string serverIP = defaultIP;
         int port = defaultPort;
 
-        string defaultFolder = Environment.CurrentDirectory + @"\ZeloFiles\";
-        Directory.CreateDirectory(defaultFolder);
+        Directory.CreateDirectory(curFolder);
 
         while (true)
         {
@@ -221,7 +223,7 @@ class Client
 
                     if(partner != null)
                     {
-                        ClientAction.StartChatting(stream, mainUser, partner, null);
+                        ClientAction.StartChatting(stream, mainUser, partner, null, curFolder);
 
                         cmdToSend.Set(CommandType.RemovePartner, null);
                         ClientHelper.SendCmd(stream, ref buffer, cmdToSend, out _);
@@ -396,7 +398,7 @@ class Client
 
                     if(joinedGroup != null)
                     {
-                        ClientAction.StartChatting(stream, mainUser, null, joinedGroup);
+                        ClientAction.StartChatting(stream, mainUser, null, joinedGroup, curFolder);
                         
                         cmdToSend.Set(CommandType.LeaveGroup, null);
                         ClientHelper.SendCmd(stream, ref buffer, cmdToSend, out _);
@@ -533,9 +535,6 @@ class Client
 
     static void FileMenu()
     {
-        string defaultFolder = Environment.CurrentDirectory + @"\ZeloFiles\", curFolder = defaultFolder;
-        Directory.CreateDirectory(defaultFolder);
-
         List<string> files;
 
         int curPage = 0;
@@ -548,11 +547,11 @@ class Client
             switch (IOHelper.ReadInput(false))
             {
                 case "1":
-                    ClientAction.OpenDelFile(curFolder, files, true);
+                    ClientAction.OpenDelCopyFile(curFolder, files, 1);
                     continue;
 
                 case "2":
-                    ClientAction.OpenDelFile(curFolder, files, false);
+                    ClientAction.OpenDelCopyFile(curFolder, files, 2);
                     continue;
 
                 case "3":
@@ -560,7 +559,11 @@ class Client
                     continue;
 
                 case "4":
-                    FileFolderMenu(defaultFolder, ref curFolder);
+                    ClientAction.OpenDelCopyFile(curFolder, files, 3);
+                    continue;
+
+                case "5":
+                    FileFolderMenu();
                     continue;
 
                 case "8":
@@ -582,7 +585,7 @@ class Client
         }
     }
     
-    static void FileFolderMenu(string defFolder, ref string curFolder)
+    static void FileFolderMenu()
     {
         while (true)
         {
@@ -595,7 +598,7 @@ class Client
                     continue;
 
                 case "2":
-                    curFolder = defFolder;
+                    curFolder = defaultFolder;
                     continue;
 
                 case "0": case null:

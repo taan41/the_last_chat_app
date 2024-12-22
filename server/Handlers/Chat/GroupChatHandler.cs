@@ -12,9 +12,12 @@ class GroupChatHandler(ChatGroup _chatGroup, ClientHandler client, Action<ChatHa
 
     public override void EchoCmd(Command cmd, ClientHandler sourceClient)
     {
-        foreach (ClientHandler client in connectedClients)
-            if(client != sourceClient)
-                client.EchoCmd(cmd, disposeTokenSource.Token);
+        base.EchoCmd(cmd, sourceClient);
+    }
+
+    public override void EchoFile(FileData file, ClientHandler sourceClient)
+    {
+        base.EchoFile(file, sourceClient);
     }
 
     public override async void AddClient(ClientHandler client)

@@ -14,7 +14,7 @@ enum CommandType
     GetSubcribed, RemoveSubcribed, GetAllGroups, SubcribeToGroup,
     JoinGroup, GetGroupInfo, GetGroupHistory, LeaveGroup,
     Message, EchoMessage, NoticePrivateMsg,
-    SendFile, AcceptFile,
+    SendFile, DoneSendingFile, AcceptFile,
     Disconnect
 }
 

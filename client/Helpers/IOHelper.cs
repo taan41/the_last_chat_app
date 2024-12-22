@@ -214,9 +214,14 @@ static class IOHelper
     private static void HandlePaste(StringBuilder sb, ref int index, int limit)
     {
         string? copiedText = TextCopy.ClipboardService.GetText();
-        sb.Insert(index, copiedText?[.. Math.Min(copiedText.Length, limit - sb.Length)]);
+        if (copiedText == null)
+            return;
+        
+        int copiedLength = Math.Min(copiedText.Length, limit - sb.Length);
+        sb.Insert(index, copiedText[..copiedLength]);
 
         Write(sb.ToString()[index ..]);
+        index += copiedLength;
     }
 
     private static void HandleDefaultKey(StringBuilder sb, ref int index, char keyChar, int startCursorLeft, bool intercept)

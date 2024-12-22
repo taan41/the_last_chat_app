@@ -13,7 +13,24 @@ abstract class ChatHandler
 
     public abstract void EchoMessage(Message message, ClientHandler sourceClient);
 
-    public abstract void EchoCmd(Command cmd, ClientHandler sourceClient);
+    public virtual void EchoCmd(Command cmd, ClientHandler sourceClient)
+    {
+        foreach (var client in connectedClients)
+            if (client != sourceClient)
+                client.EchoCmd(cmd, disposeTokenSource.Token);
+    }
+
+    public virtual void EchoFile(FileData file, ClientHandler sourceClient)
+    {
+        if (file.FileBytes == null)
+            return;
+            
+        EchoCmd(new Command(CommandType.SendFile, file.Serialize()), sourceClient);
+        
+        foreach (var client in connectedClients)
+            if (client != sourceClient)
+                client.EchoByte(file.FileBytes, disposeTokenSource.Token);
+    }
 
     public virtual void AddClient(ClientHandler client)
     {

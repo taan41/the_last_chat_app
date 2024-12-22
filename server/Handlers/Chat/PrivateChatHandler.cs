@@ -12,9 +12,12 @@ class PrivateChatHandler(ClientHandler client, int user1ID, int user2ID, Action<
 
     public override void EchoCmd(Command cmd, ClientHandler sourceClient)
     {
-        foreach (ClientHandler client in connectedClients)
-            if(client != sourceClient)
-                client.EchoCmd(cmd, disposeTokenSource.Token);
+        base.EchoCmd(cmd, sourceClient);
+    }
+
+    public override void EchoFile(FileData file, ClientHandler sourceClient)
+    {
+        base.EchoFile(file, sourceClient);
     }
 
     public override void AddClient(ClientHandler client)

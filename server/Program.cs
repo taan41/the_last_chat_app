@@ -50,8 +50,8 @@ class Server
         }
         catch(Exception ex)
         {
-            WriteLine($" Error while running program: {ex.Message}");
-            LogManager.AddLog($"Error while running program: {ex.Message}");
+            WriteLine($" Error while running program: {ex}");
+            LogManager.AddLog($"Error while running program: {ex}");
             ReadKey(true);
         }
     }
@@ -416,7 +416,7 @@ class Server
         }
     }
 
-    public static void DisposeClient(ClientHandler client)
+    public static void RemoveClient(ClientHandler client)
     {
         lock(clientHanlders)
         {
