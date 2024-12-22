@@ -263,7 +263,12 @@ class ClientHandler
 
     private async Task<(Command cmdToSend, User? requestedUser)> GetUserPwd(Command cmd)
     {
-        var (requestedUser, errorMessage) = await DBHelper.UserDB.Get(cmd.Payload, true);
+        var (success, errorMessage) = await DBHelper.UserDB.CheckOnline(cmd.Payload);
+
+        if(!success)
+            return (Helper.ErrorCmd(this, cmd, errorMessage), null);
+
+         (var requestedUser, errorMessage) = await DBHelper.UserDB.Get(cmd.Payload, true);
 
         if(requestedUser == null)
             return (Helper.ErrorCmd(this, cmd, errorMessage), null);

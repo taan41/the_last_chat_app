@@ -198,6 +198,31 @@ static class DBHelper
                 return (false, ex.Message);
             }
         }
+        
+        public static async Task<(bool success, string errorMessage)> CheckOnline(string username)
+        {
+            string query = "SELECT * FROM Users WHERE Username = @username AND OnlineStatus = TRUE";
+
+            try
+            {
+                using MySqlConnection conn = new(connectionString);
+                await conn.OpenAsync();
+
+                using MySqlCommand cmd = new(query, conn);
+                cmd.Parameters.AddWithValue("@username", username);
+
+                using var reader = await cmd.ExecuteReaderAsync();
+
+                if (!reader.HasRows) // User is offline
+                    return (true, "");
+                else
+                    return (false, "User is already logged in");
+            }
+            catch (MySqlException ex)
+            {
+                return (false, ex.Message);
+            }
+        }
 
         public static async Task<(bool success, string errorMessage)> Add(User userToAdd)
         {

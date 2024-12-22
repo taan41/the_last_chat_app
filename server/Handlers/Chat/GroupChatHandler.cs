@@ -7,7 +7,7 @@ class GroupChatHandler(ChatGroup _chatGroup, ClientHandler client, Action<ChatHa
     public override async void EchoMessage(Message message, ClientHandler sourceClient)
     {
         await DBHelper.MessageDB.AddGroup(message);
-        EchoCmd(new(CommandType.Message, message.Serialize()), sourceClient);
+        EchoCmd(new(CommandType.EchoMessage, message.Serialize()), sourceClient);
     }
 
     public override void EchoCmd(Command cmd, ClientHandler sourceClient)
