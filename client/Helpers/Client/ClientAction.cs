@@ -941,7 +941,7 @@ static class ClientAction
                         case "/help":
                             IOHelper.MoveCursor(- prompt.Length - inputBuffer.Length - WindowWidth);
                             WriteLine(new string(' ', WindowWidth - 1));
-                            WriteLine("[Client] All chat commands:");
+                            WriteLine("[System] All chat commands:");
                             ClientMenu.ChatCommands();
                             WritePromt(prompt);
                             continue;
@@ -954,7 +954,7 @@ static class ClientAction
                             }
                             else if (partner != null)
                             {
-                                WriteNotice($"[Client] Partner's info: '{partner.Info(false, true)}'", prompt);
+                                WriteNotice($"[System] Partner's info: '{partner.Info(false, true)}'", prompt);
                             }
                             continue;
 
@@ -970,16 +970,16 @@ static class ClientAction
 
                         case "/file":
                             if (chatCmd.Length == spaceIndex)
-                                WriteNotice("[Client] Error: Invalid file path", prompt);
+                                WriteNotice("[System] Error: Invalid file path", prompt);
                             else
                             {
                                 string filePath = chatCmd[(spaceIndex + 1)..].Replace("\"", "");
-                                WriteNotice($"[Client] Start sending file {filePath}", prompt);
+                                WriteNotice($"[System] Start sending file {filePath}", prompt);
 
                                 if (SendFile(stream, filePath))
-                                    WriteNotice("[Client] Sent file successfully", prompt);
+                                    WriteNotice("[System] Sent file successfully", prompt);
                                 else
-                                    WriteNotice("[Client] Failed to send file", prompt);
+                                    WriteNotice("[System] Failed to send file", prompt);
                             }
                             continue;
 
@@ -989,7 +989,7 @@ static class ClientAction
                             return;
                         
                         default:
-                            WriteNotice("[Client] Error: Unknown chat command", prompt);
+                            WriteNotice("[System] Error: Unknown chat command", prompt);
                             continue;
                     }
                 }
@@ -1076,7 +1076,7 @@ static class ClientAction
                         Message? echoMsg = Message.Deserialize(receivedCmd.Payload);
 
                         if (echoMsg == null)
-                            WriteNotice("[Client] Error: Null echo message", prompt);
+                            WriteNotice("[System] Error: Null echo message", prompt);
                         else
                         {
                             WriteMessage(echoMsg.Print(), prompt);
@@ -1087,7 +1087,7 @@ static class ClientAction
 
                     case CommandType.GetGroupInfo:
                         ChatGroup? requestedGroup = ChatGroup.Deserialize(receivedCmd.Payload);
-                        WriteNotice($"[Client] Group info: '{requestedGroup?.Info(true, true)}'", prompt);
+                        WriteNotice($"[System] Group info: '{requestedGroup?.Info(true, true)}'", prompt);
                         continue;
 
                     case CommandType.DoneSendingFile:
@@ -1097,19 +1097,19 @@ static class ClientAction
                     case CommandType.SendFile:
                         string? filePath = await ReceiveFile(stream, receivedCmd, savePath, stopToken);
                         if (filePath != null)
-                            WriteNotice($"[Client] File received and saved as {Path.GetFileName(filePath)}", prompt);
+                            WriteNotice($"[System] File received and saved as {Path.GetFileName(filePath)}", prompt);
                         continue;
 
                     case CommandType.Disconnect:
-                        WriteNotice("[Client] Server shut down", prompt);
+                        WriteNotice("[System] Server shut down", prompt);
                         return;
 
                     case CommandType.Error:
-                        WriteNotice($"[Client] Error while echoing: {receivedCmd.Payload}", prompt);
+                        WriteNotice($"[System] Error while echoing: {receivedCmd.Payload}", prompt);
                         return;
 
                     default:
-                        WriteNotice($"[Client] Error while echoing: Received invalid command {receivedCmd?.CommandType}", prompt);
+                        WriteNotice($"[System] Error while echoing: Received invalid command {receivedCmd?.CommandType}", prompt);
                         return;
                 }
             }
@@ -1118,7 +1118,7 @@ static class ClientAction
         catch(IOException) {}
         catch(Exception ex)
         {
-            WriteNotice($"[Client] Error while echoing msg: ({ex.GetType().Name}) {ex.Message}", prompt);
+            WriteNotice($"[System] Error while echoing msg: ({ex.GetType().Name}) {ex.Message}", prompt);
             // WriteLine(ex);
             ReadKey(true);
         }
