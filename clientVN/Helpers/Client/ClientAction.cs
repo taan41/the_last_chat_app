@@ -19,9 +19,9 @@ static class ClientAction
             ClientMenu.Welcome();
             WriteLine("1");
             IOHelper.WriteBorder();
-            WriteLine(" < Press ESC to cancel >");
+            WriteLine(" < Nhấn 'ESC' để hủy >");
 
-            Write(" Enter username: ");
+            Write(" Nhập username: ");
             string? username = ClientHelper.InputData("Username", MagicNum.usernameMin, MagicNum.nicknameMax, false);
             if (username == null)
                 return;
@@ -34,15 +34,15 @@ static class ClientAction
                 pwdSet = PasswordSet.Deserialize(receivedCmd.Payload);
                 if (pwdSet == null)
                 {
-                    WriteLine(" Error: Received invalid password");
+                    WriteLine(" Lỗi: Thông tin mật khẩu không hợp lệ");
                     ReadKey(true);
                     continue;
                 }
             }
             else continue;
 
-            Write(" Enter password: ");
-            string? pwd = ClientHelper.InputData("Password", MagicNum.passwordMin, MagicNum.passwordMax, true);
+            Write(" Nhập mật khẩu: ");
+            string? pwd = ClientHelper.InputData("Mật khẩu", MagicNum.passwordMin, MagicNum.passwordMax, true);
             if (pwd == null)
                 return;
 
@@ -56,7 +56,7 @@ static class ClientAction
 
                     if (loggedInUser == null || loggedInUser.UserID < 1)
                     {
-                        WriteLine(" Error: Received invalid user data");
+                        WriteLine(" Lỗi: Thông tin người dùng không hợp lệ");
                         ReadKey(true);
                         return;
                     }
@@ -64,7 +64,7 @@ static class ClientAction
                     {
                         loggedInUser.PwdSet = pwdSet;
                         IOHelper.WriteBorder();
-                        WriteLine(" Logged in successfully!");
+                        WriteLine(" Đăng nhập thành công");
                         ReadKey(true);
                         return;
                     }
@@ -72,7 +72,7 @@ static class ClientAction
             }
             else
             {
-                WriteLine(" Error: Wrong password");
+                WriteLine(" Lỗi: Mật khẩu sai");
                 ReadKey(true);
                 continue;
             }
@@ -92,9 +92,9 @@ static class ClientAction
             ClientMenu.Welcome();
             WriteLine("2");
             IOHelper.WriteBorder();
-            WriteLine(" < Press ESC to cancel >");
+            WriteLine(" < Nhấn 'ESC' để hủy >");
 
-            Write(" Enter username   : ");
+            Write(" Nhập username: ");
             if (username != null)
                 WriteLine(username);
             else
@@ -111,20 +111,20 @@ static class ClientAction
                 continue;
             }
 
-            Write(" Enter password   : ");
+            Write(" Nhập mật khẩu: ");
             if (pwd != null)
                 WriteLine(new string('*', pwd.Length));
             else
-                pwd = ClientHelper.InputData("Password", MagicNum.passwordMin, MagicNum.passwordMax, true);
+                pwd = ClientHelper.InputData("Mật khẩu", MagicNum.passwordMin, MagicNum.passwordMax, true);
             
             if (pwd == null)
                 return;
 
-            Write(" Confirm password : ");
+            Write(" Xác nhận mật khẩu: ");
             if (confirmPwd != null)
                 WriteLine(new string('*', confirmPwd.Length));
             else
-                confirmPwd = ClientHelper.InputData("Password", MagicNum.passwordMin, MagicNum.passwordMax, true);
+                confirmPwd = ClientHelper.InputData("Mật khẩu", MagicNum.passwordMin, MagicNum.passwordMax, true);
             
             if (confirmPwd == null)
                 return;
@@ -133,12 +133,12 @@ static class ClientAction
             {
                 pwd = null;
                 confirmPwd = null;
-                WriteLine(" Error: Mis-match confirm password");
+                WriteLine(" Lỗi: Mis-match confirm mật khẩu");
                 ReadKey(true);
                 continue;
             }
 
-            Write(" Enter nickname   : ");
+            Write(" Nhập nickname   : ");
             string? nickname = ClientHelper.InputData("Nickname", MagicNum.nicknameMin, MagicNum.nicknameMax, false);
             if (nickname == null)
                 return;
@@ -154,7 +154,7 @@ static class ClientAction
             if (ClientHelper.SendCmd(stream, ref buffer, cmdToSend, out _))
             {
                 IOHelper.WriteBorder();
-                WriteLine(" Registered successfully!");
+                WriteLine(" Đăng ký thành công");
                 ReadKey(true);
             }
 
@@ -165,9 +165,9 @@ static class ClientAction
     public static void ChangeNickname(NetworkStream stream, ref byte[] buffer, ref User user)
     {
         IOHelper.WriteBorder();
-        WriteLine(" < Press ESC to cancel >");
+        WriteLine(" < Nhấn 'ESC' để hủy >");
 
-        Write(" Enter new nickname: ");
+        Write(" Nhập nickname mới: ");
         string? newNickname = ClientHelper.InputData("Nickname", MagicNum.nicknameMin, MagicNum.nicknameMax, false);
         if (newNickname == null)
             return;
@@ -176,7 +176,7 @@ static class ClientAction
         {
             user.Nickname = newNickname;
             IOHelper.WriteBorder();
-            WriteLine(" Changed nickname successfully!");
+            WriteLine(" Đổi nickname thành công");
             ReadKey(true);
         }
     }
@@ -185,7 +185,7 @@ static class ClientAction
     {
         if (user.PwdSet == null)
         {
-            WriteLine(" Error: Null PasswordSet");
+            WriteLine(" Lỗi: Thông tin mật khẩu không hợp lệ");
             ReadKey(true);
             return;
         }
@@ -200,13 +200,13 @@ static class ClientAction
             ClientMenu.MainUser(user.Nickname);
             WriteLine("2");
             IOHelper.WriteBorder();
-            WriteLine(" < Press ESC to cancel >");
+            WriteLine(" < Nhấn 'ESC' để hủy >");
 
-            Write(" Enter old password   : ");
+            Write(" Nhập mật khẩu cũ: ");
             if (oldPwd != null)
                 WriteLine(new string('*', oldPwd.Length));
             else
-                oldPwd = ClientHelper.InputData("Password", MagicNum.passwordMin, MagicNum.passwordMax, true);
+                oldPwd = ClientHelper.InputData("Mật khẩu", MagicNum.passwordMin, MagicNum.passwordMax, true);
             
             if (oldPwd == null)
                 return;
@@ -214,16 +214,16 @@ static class ClientAction
             if (!VerifyPassword(oldPwd.ToString(), user.PwdSet))
             {
                 oldPwd = null;
-                WriteLine(" Error: Wrong password");
+                WriteLine(" Lỗi: Mật khẩu sai");
                 ReadKey(true);
                 continue;
             }
 
-            Write(" Enter new password   : ");
+            Write(" Nhập mật khẩu mới: ");
             if (newPwd != null)
                 WriteLine(new string('*', newPwd.Length));
             else
-                newPwd = ClientHelper.InputData("Password", MagicNum.passwordMin, MagicNum.passwordMax, true);
+                newPwd = ClientHelper.InputData("Mật khẩu", MagicNum.passwordMin, MagicNum.passwordMax, true);
 
             if (newPwd == null)
                 return;
@@ -231,20 +231,20 @@ static class ClientAction
             if (newPwd.Equals(oldPwd))
             {
                 newPwd = null;
-                WriteLine(" Error: New password must be different");
+                WriteLine(" Lỗi: Mật khẩu mới phải khác mật khẩu cũ");
                 ReadKey(true);
                 continue;
             }
 
-            Write(" Confirm new password : ");
-            confirmPwd = ClientHelper.InputData("Password", MagicNum.passwordMin, MagicNum.passwordMax, true);
+            Write(" Xác nhận mật khẩu mới: ");
+            confirmPwd = ClientHelper.InputData("Mật khẩu", MagicNum.passwordMin, MagicNum.passwordMax, true);
             if (confirmPwd == null)
                 return;
 
             if (!confirmPwd.Equals(newPwd))
             {
                 newPwd = null;
-                WriteLine(" Error: Mis-match confirm password");
+                WriteLine(" Lỗi: Xác nhận mật khẩu sai");
                 ReadKey(true);
                 continue;
             }
@@ -255,7 +255,7 @@ static class ClientAction
             {
                 user.PwdSet = newPwdSet;
                 IOHelper.WriteBorder();
-                WriteLine(" Changed password successfully!");
+                WriteLine(" Đổi mật khẩu thành công");
                 ReadKey(true);
             }
         }
@@ -271,7 +271,7 @@ static class ClientAction
 
             if (users == null)
             {
-                WriteLine(" Error: Received null user list");
+                WriteLine(" Lỗi: Thông tin danh sách không hợp lệ");
                 ReadKey(true);
             }
 
@@ -291,7 +291,7 @@ static class ClientAction
 
             if (friends == null)
             {
-                WriteLine(" Error: Received null friend list");
+                WriteLine(" Lỗi: Thông tin danh sách không hợp lệ");
                 ReadKey(true);
             }
 
@@ -306,9 +306,9 @@ static class ClientAction
         partner = null;
     
         IOHelper.WriteBorder();
-        WriteLine(" < Press ESC to cancel >");
+        WriteLine(" < Nhấn 'ESC' để hủy >");
 
-        Write(" Enter friend's ID: ");
+        Write(" Nhập ID bạn bè: ");
         string? partnerIDString = ClientHelper.InputData("ID", 0, null, false);
         if (partnerIDString == null)
             return;
@@ -324,14 +324,14 @@ static class ClientAction
         }
         catch (FormatException)
         {
-            WriteLine(" Error: Invalid ID");
+            WriteLine(" Lỗi: ID không hợp lệ");
             ReadKey(true);
             return;
         }
 
         if (partnerID == mainUserID)
         {
-            WriteLine(" Error: Can't message to self");
+            WriteLine(" Lỗi: Không thể nhắn tin bản thân");
             ReadKey(true);
             return;
         }
@@ -342,7 +342,7 @@ static class ClientAction
 
             if(partner == null)
             {
-                WriteLine(" Error: Received invalid user data");
+                WriteLine(" Lỗi: Thông tin người dùng không hợp lệ");
                 ReadKey(true);
             }
         }
@@ -351,9 +351,9 @@ static class ClientAction
     public static void RemoveFriend(NetworkStream stream, ref byte[] buffer, List<Friend> friends)
     {
         IOHelper.WriteBorder();
-        WriteLine(" < Press ESC to cancel >");
+        WriteLine(" < Nhấn 'ESC' để hủy >");
 
-        Write(" Enter friend's ID: ");
+        Write(" Nhập ID bạn bè: ");
         string? friendIDString = ClientHelper.InputData("ID", 0, null, false);
         if (friendIDString == null)
             return;
@@ -368,7 +368,7 @@ static class ClientAction
         }
         catch (FormatException)
         {
-            WriteLine(" Error: Invalid ID");
+            WriteLine(" Lỗi: ID không hợp lệ");
             ReadKey(true);
             return;
         }
@@ -384,9 +384,9 @@ static class ClientAction
         if (receivedRqs != null)
         {
             IOHelper.WriteBorder();
-            WriteLine(" < Press ESC to cancel >");
+            WriteLine(" < Nhấn 'ESC' để hủy >");
 
-            Write(" Enter user's ID: ");
+            Write(" Nhập ID người dùng: ");
             string? userIDString = ClientHelper.InputData("ID", 0, null, false);
             if (userIDString == null)
                 return;
@@ -400,7 +400,7 @@ static class ClientAction
             }
             catch (FormatException)
             {
-                WriteLine(" Error: Invalid ID");
+                WriteLine(" Lỗi: ID không hợp lệ");
                 ReadKey(true);
                 return;
             }
@@ -414,9 +414,9 @@ static class ClientAction
     {
         int? userID;
         IOHelper.WriteBorder();
-        WriteLine(" < Press ESC to cancel >");
+        WriteLine(" < Nhấn 'ESC' để hủy >");
 
-        Write(" Enter user's ID: ");
+        Write(" Nhập ID người dùng: ");
         string? userIDString = ClientHelper.InputData("ID", 0, null, false);
         if (userIDString == null)
             return;
@@ -427,14 +427,14 @@ static class ClientAction
         }
         catch (FormatException)
         {
-            WriteLine(" Error: Invalid ID");
+            WriteLine(" Lỗi: ID không hợp lệ");
             ReadKey(true);
             return;
         }
 
         if (userID == mainUserID)
         {
-            WriteLine(" Error: Can't send request to self");
+            WriteLine(" Lỗi: Không thể gửi lời mời tới bản thân");
             ReadKey(true);
             return;
         }
@@ -444,7 +444,7 @@ static class ClientAction
         if(ClientHelper.SendCmd(stream, ref buffer, cmdToSend, out _))
         {
             IOHelper.WriteBorder();
-            WriteLine(" Sent friend request successfully");
+            WriteLine(" Gửi lời mời kết bạn thành công");
             ReadKey(true);
         }
     }
@@ -453,9 +453,9 @@ static class ClientAction
     {
         int? userID;
         IOHelper.WriteBorder();
-        WriteLine(" < Press ESC to cancel >");
+        WriteLine(" < Nhấn 'ESC' để hủy >");
 
-        Write(" Enter user's ID: ");
+        Write(" Nhập ID người dùng: ");
         string? userIDString = ClientHelper.InputData("ID", 0, null, false);
         if (userIDString == null)
             return;
@@ -466,14 +466,14 @@ static class ClientAction
         }
         catch (FormatException)
         {
-            WriteLine(" Error: Invalid ID");
+            WriteLine(" Lỗi: ID không hợp lệ");
             ReadKey(true);
             return;
         }
 
         if (userID == mainUserID)
         {
-            WriteLine(" Error: Can't block self");
+            WriteLine(" Lỗi: Không thể chặn bản thân");
             ReadKey(true);
             return;
         }
@@ -483,7 +483,7 @@ static class ClientAction
         if(ClientHelper.SendCmd(stream, ref buffer, cmdToSend, out _))
         {
             IOHelper.WriteBorder();
-            WriteLine(" Blocked user successfully");
+            WriteLine(" Chặn thành công");
             ReadKey(true);
         }
     }
@@ -498,7 +498,7 @@ static class ClientAction
 
             if (groups == null)
             {
-                WriteLine(" Error: Received null subcribed list");
+                WriteLine(" Lỗi: Thông tin danh sách không hợp lệ");
                 ReadKey(true);
             }
 
@@ -511,9 +511,9 @@ static class ClientAction
     public static void SubUnsubToGroup(NetworkStream stream, ref byte[] buffer, List<ChatGroup> subcribedGroups, bool subcribing)
     {
         IOHelper.WriteBorder();
-        WriteLine(" < Press ESC to cancel >");
+        WriteLine(" < Nhấn 'ESC' để hủy >");
 
-        Write(" Enter chat group ID: ");
+        Write(" Nhập ID nhóm: ");
         string? groupIDString = ClientHelper.InputData("ID", 0, null, false);
         if (groupIDString == null)
             return;
@@ -528,14 +528,14 @@ static class ClientAction
         }
         catch (FormatException)
         {
-            WriteLine(" Error: Invalid ID");
+            WriteLine(" Lỗi: ID không hợp lệ");
             ReadKey(true);
             return;
         }
 
         if(ClientHelper.SendCmd(stream, ref buffer, new(subcribing ? CommandType.SubcribeToGroup : CommandType.RemoveSubcribed, groupID.ToString()), out _))
         {
-            WriteLine($"{(subcribing ? "S" : "Uns")}ubscribe successfully");
+            WriteLine($"{(subcribing ? "T" : "Hủy t")}ham gia thành công");
             ReadKey(true);
         }
     }
@@ -545,9 +545,9 @@ static class ClientAction
         group = null;
 
         IOHelper.WriteBorder();
-        WriteLine(" < Press ESC to cancel >");
+        WriteLine(" < Nhấn 'ESC' để hủy >");
 
-        Write(" Enter chat group ID: ");
+        Write(" Nhập ID nhóm: ");
         string? groupIDString = ClientHelper.InputData("ID", 0, null, false);
         if (groupIDString == null)
             return;
@@ -562,7 +562,7 @@ static class ClientAction
         }
         catch (FormatException)
         {
-            WriteLine(" Error: Invalid ID");
+            WriteLine(" Lỗi: ID không hợp lệ");
             ReadKey(true);
             return;
         }
@@ -573,7 +573,7 @@ static class ClientAction
 
             if(group == null)
             {
-                WriteLine(" Error: Received invalid chat group data");
+                WriteLine(" Lỗi: Thông tin danh sách không hợp lệ");
                 ReadKey(true);
             }
         }
@@ -582,10 +582,10 @@ static class ClientAction
     public static void CreateGroup(NetworkStream stream, ref byte[] buffer, int creatorID)
     {
         IOHelper.WriteBorder();
-        WriteLine(" < Press ESC to cancel >");
+        WriteLine(" < Nhấn 'ESC' để hủy >");
 
-        Write(" Enter chat group name: ");
-        string? groupName = ClientHelper.InputData("Chat group name", MagicNum.groupnameMin, MagicNum.groupNameMax, false);
+        Write(" Nhập tên nhóm: ");
+        string? groupName = ClientHelper.InputData("Tên nhóm", MagicNum.groupnameMin, MagicNum.groupNameMax, false);
         if (groupName == null)
             return;
 
@@ -598,7 +598,7 @@ static class ClientAction
         if (ClientHelper.SendCmd(stream, ref buffer, new(CommandType.CreateGroup, newGroup.Serialize()), out _))
         {
             IOHelper.WriteBorder();
-            WriteLine(" Created chat group successfully!");
+            WriteLine(" Tạo nhóm thành công");
             ReadKey(true);
         }
         
@@ -608,9 +608,9 @@ static class ClientAction
     public static void ChangeGroupName(NetworkStream stream, ref byte[] buffer, List<ChatGroup> createdGroups)
     {
         IOHelper.WriteBorder();
-        WriteLine(" < Press ESC to cancel >");
+        WriteLine(" < Nhấn 'ESC' để hủy >");
 
-        Write(" Enter chat group ID: ");
+        Write(" Nhập ID nhóm: ");
         string? groupIDString = ClientHelper.InputData("ID", 0, null, false);
         if (groupIDString == null)
             return;
@@ -626,7 +626,7 @@ static class ClientAction
         }
         catch (FormatException)
         {
-            WriteLine(" Error: Invalid ID");
+            WriteLine(" Lỗi: ID không hợp lệ");
             ReadKey(true);
             return;
         }
@@ -635,16 +635,16 @@ static class ClientAction
         if (groupToChange == null)
             return;
 
-        WriteLine($" Group's current name: {groupToChange.GroupName}");
-        Write(" Enter new name: ");
-        string? newName = ClientHelper.InputData("Group name", MagicNum.groupnameMin, MagicNum.groupNameMax, false);
+        WriteLine($" Tên nhóm hiện tại: {groupToChange.GroupName}");
+        Write(" Nhập tên mới: ");
+        string? newName = ClientHelper.InputData("Tên nhóm", MagicNum.groupnameMin, MagicNum.groupNameMax, false);
         if (newName == null)
             return;
 
         if (ClientHelper.SendCmd(stream, ref buffer, new(CommandType.ChangeGroupName, newName), out _))
         {
             IOHelper.WriteBorder();
-            WriteLine(" Changed chat group's name successfully!");
+            WriteLine(" Đổi tên nhóm thành công");
             ReadKey(true);
         }
         
@@ -655,9 +655,9 @@ static class ClientAction
     public static void DeleteGroup(NetworkStream stream, ref byte[] buffer, List<ChatGroup> createdGroups)
     {
         IOHelper.WriteBorder();
-        WriteLine(" < Press ESC to cancel >");
+        WriteLine(" < Nhấn 'ESC' để hủy >");
 
-        Write(" Enter chat group ID: ");
+        Write(" Nhập ID nhóm: ");
         string? groupIDString = ClientHelper.InputData("ID", 0, null, false);
         if (groupIDString == null)
             return;
@@ -675,7 +675,7 @@ static class ClientAction
         }
         catch (FormatException)
         {
-            WriteLine(" Error: Invalid ID");
+            WriteLine(" Lỗi: ID không hợp lệ");
             ReadKey(true);
             return;
         }
@@ -683,7 +683,7 @@ static class ClientAction
         if (ClientHelper.SendCmd(stream, ref buffer, new(CommandType.DeleteGroup, groupID.ToString()), out _))
         {
             IOHelper.WriteBorder();
-            WriteLine(" Deleted chat group successfully!");
+            WriteLine(" Xóa nhóm thành công");
             ReadKey(true);
         }
     }
@@ -694,9 +694,9 @@ static class ClientAction
             return;
 
         IOHelper.WriteBorder();
-        WriteLine(" < Press ESC to cancel >");
+        WriteLine(" < Nhấn 'ESC' để hủy >");
 
-        Write(" Enter file's index: ");
+        Write(" Nhập thứ tự tệp: ");
         string? fileIndexString = IOHelper.ReadInput(false);
         if (fileIndexString == null)
             return;
@@ -711,7 +711,7 @@ static class ClientAction
         }
         catch (FormatException)
         {
-            WriteLine(" Error: Invalid index");
+            WriteLine(" Lỗi: Thứ tự không hợp lệ");
             ReadKey(true);
             return;
         }
@@ -736,9 +736,9 @@ static class ClientAction
             return;
 
         IOHelper.WriteBorder();
-        WriteLine(" < Press ESC to cancel >");
+        WriteLine(" < Nhấn 'ESC' để hủy >");
 
-        Write(" Enter file's index: ");
+        Write(" Nhập thứ tự tệp: ");
         string? fileIndexString = IOHelper.ReadInput(false);
         if (fileIndexString == null)
             return;
@@ -753,12 +753,12 @@ static class ClientAction
         }
         catch (FormatException)
         {
-            WriteLine(" Error: Invalid index");
+            WriteLine(" Lỗi: Thứ tự không hợp lệ");
             ReadKey(true);
             return;
         }
 
-        Write(" Enter file's new name (without extension): ");
+        Write(" Nhập tên mới (không đuôi): ");
         string? fileName = IOHelper.ReadInput(false);
         if (fileName == null)
             return;
@@ -767,7 +767,7 @@ static class ClientAction
 
         if (File.Exists(dirPath + fileName))
         {
-            WriteLine(" Error: File with same name already exists");
+            WriteLine(" Lỗi: Tệp cùng tên đã tồn tại");
             ReadKey(true);
         }
         else
@@ -777,33 +777,33 @@ static class ClientAction
     public static void ChangeFolder(ref string curFolder)
     {
         IOHelper.WriteBorder();
-        WriteLine(" < Press ESC to cancel >");
+        WriteLine(" < Nhấn 'ESC' để hủy >");
 
-        Write(" Enter file's index: ");
+        Write(" Nhập thứ tự tệp: ");
         string? newFolder = IOHelper.ReadInput(false);
         if (newFolder == null)
             return;
 
         if (!Path.Exists(newFolder))
         {
-            WriteLine(" Error: Folder does not exist");
-            WriteLine(" Do you want to create folder? (Y/N): ");
+            WriteLine(" Lỗi: Thư mục không tồn tại");
+            WriteLine(" Tạo thư mục? (Y/N): ");
             if(IOHelper.ReadConfirm() ?? false)
             {
                 Directory.CreateDirectory(newFolder);
                 curFolder = newFolder;
                 IOHelper.WriteBorder();
-                WriteLine(" Changed save folder successfully");
+                WriteLine(" Đổi vị trí thư mục lưu thành công");
             }
             else
-                WriteLine(" Failed to change save folder");
+                WriteLine(" Đổi vị trí thư mục lưu không thành công");
             ReadKey(true);
         }
         else
         {
             curFolder = newFolder;
             IOHelper.WriteBorder();
-            WriteLine(" Changed save folder successfully");
+            WriteLine(" Đổi vị trí thư mục lưu thành công");
             ReadKey(true);
         }
 
@@ -882,23 +882,23 @@ static class ClientAction
     {
         if(mainUser.UserID == -1 || (joinedGroup == null && partner == null))
         {
-            WriteLine(" Error: Invalid chatting data");
+            WriteLine(" Lỗi: Thông tin nhóm/người dùng không hợp lệ");
             return;
         }
         Clear();
         IOHelper.WriteHeader("Zelo");
-        WriteLine(" All chat commands:");
+        WriteLine(" Các lệnh chat:");
         ClientMenu.ChatCommands();
         IOHelper.WriteBorder();
 
         if (joinedGroup != null && GetGroupHistory(stream, joinedGroup.GroupID))
-            WriteLine(" Load group's message history successfully");
+            WriteLine(" Tải lịch sử tin nhắn nhóm thành công");
         else if (partner != null && GetPartnerHistory(stream))
-            WriteLine(" Load message history successfully");
+            WriteLine(" Tải lịch sử tin nhắn thành công");
         else
-            WriteLine(" Failed to load message history");
+            WriteLine(" Lỗi: Tải lịch sử tin nhắn không thành công");
 
-        WriteLine(" Press any key to continue...");
+        WriteLine(" Nhấn phím bất kỳ để tiếp tục...");
         ReadKey(true);
         Clear();
 
@@ -941,7 +941,7 @@ static class ClientAction
                         case "/help":
                             IOHelper.MoveCursor(- prompt.Length - inputBuffer.Length - WindowWidth);
                             WriteLine(new string(' ', WindowWidth - 1));
-                            WriteLine("[Client] All chat commands:");
+                            WriteLine("[Hệ thống] Các lệnh chat:");
                             ClientMenu.ChatCommands();
                             WritePromt(prompt);
                             continue;
@@ -954,7 +954,7 @@ static class ClientAction
                             }
                             else if (partner != null)
                             {
-                                WriteNotice($"[Client] Partner's info: '{partner.Info(false, true)}'", prompt);
+                                WriteNotice($"[Hệ thống] Thông tin bạn: '{partner.Info(false, true)}'", prompt);
                             }
                             continue;
 
@@ -970,16 +970,16 @@ static class ClientAction
 
                         case "/file":
                             if (chatCmd.Length == spaceIndex)
-                                WriteNotice("[Client] Error: Invalid file path", prompt);
+                                WriteNotice("[Hệ thống] Lỗi: Đường dẫn tệp không hợp lệ", prompt);
                             else
                             {
                                 string filePath = chatCmd[(spaceIndex + 1)..].Replace("\"", "");
-                                WriteNotice($"[Client] Start sending file {filePath}", prompt);
+                                WriteNotice($"[Hệ thống] Bắt đầu gửi tệp {filePath}", prompt);
 
                                 if (SendFile(stream, filePath))
-                                    WriteNotice("[Client] Sent file successfully", prompt);
+                                    WriteNotice("[Hệ thống] Gửi tệp thành công", prompt);
                                 else
-                                    WriteNotice("[Client] Failed to send file", prompt);
+                                    WriteNotice("[Hệ thống] Gửi tệp không thành công", prompt);
                             }
                             continue;
 
@@ -989,7 +989,7 @@ static class ClientAction
                             return;
                         
                         default:
-                            WriteNotice("[Client] Error: Unknown chat command", prompt);
+                            WriteNotice("[Hệ thống] Lỗi: Lệnh không tồn tại", prompt);
                             continue;
                     }
                 }
@@ -1007,17 +1007,17 @@ static class ClientAction
         }
         catch (Exception ex)
         {
-            WriteNotice($" Error: {ex}", prompt);
+            WriteNotice($" Lỗi: {ex}", prompt);
             ClientHelper.SendDisconnect(stream);
         }
     }
 
     private static bool doneSendingFile = false;
     private static readonly string[] waitting = [
-        "Sending file.   ",
-        "Sending file..  ",
-        "Sending file... ",
-        "Sending file...."
+        "Đang gửi tệp.   ",
+        "Đang gửi tệp..  ",
+        "Đang gửi tệp... ",
+        "Đang gửi tệp...."
     ];
 
     private static bool SendFile(NetworkStream stream, string filePath)
@@ -1076,7 +1076,7 @@ static class ClientAction
                         Message? echoMsg = Message.Deserialize(receivedCmd.Payload);
 
                         if (echoMsg == null)
-                            WriteNotice("[Client] Error: Null echo message", prompt);
+                            WriteNotice("[Hệ thống] Lỗi: Tin nhắn rỗng", prompt);
                         else
                         {
                             WriteMessage(echoMsg.Print(), prompt);
@@ -1087,7 +1087,7 @@ static class ClientAction
 
                     case CommandType.GetGroupInfo:
                         ChatGroup? requestedGroup = ChatGroup.Deserialize(receivedCmd.Payload);
-                        WriteNotice($"[Client] Group info: '{requestedGroup?.Info(true, true)}'", prompt);
+                        WriteNotice($"[Hệ thống] Thông tin nhóm: '{requestedGroup?.Info(true, true)}'", prompt);
                         continue;
 
                     case CommandType.DoneSendingFile:
@@ -1097,19 +1097,19 @@ static class ClientAction
                     case CommandType.SendFile:
                         string? filePath = await ReceiveFile(stream, receivedCmd, savePath, stopToken);
                         if (filePath != null)
-                            WriteNotice($"[Client] File received and saved as {Path.GetFileName(filePath)}", prompt);
+                            WriteNotice($"[Hệ thống] Lưu tệp đã nhận tại {Path.GetFileName(filePath)}", prompt);
                         continue;
 
                     case CommandType.Disconnect:
-                        WriteNotice("[Client] Server shut down", prompt);
+                        WriteNotice("[Hệ thống] Server ngừng hoạt động", prompt);
                         return;
 
                     case CommandType.Error:
-                        WriteNotice($"[Client] Error while echoing: {receivedCmd.Payload}", prompt);
+                        WriteNotice($"[Hệ thống] Lỗi: {receivedCmd.Payload}", prompt);
                         return;
 
                     default:
-                        WriteNotice($"[Client] Error while echoing: Received invalid command {receivedCmd?.CommandType}", prompt);
+                        WriteNotice($"[Hệ thống] Lỗi: Lệnh phản hồi không hợp lệ {receivedCmd?.CommandType}", prompt);
                         return;
                 }
             }
@@ -1118,7 +1118,7 @@ static class ClientAction
         catch(IOException) {}
         catch(Exception ex)
         {
-            WriteNotice($"[Client] Error while echoing msg: ({ex.GetType().Name}) {ex.Message}", prompt);
+            WriteNotice($"[Hệ thống] Lỗi: ({ex.GetType().Name}) {ex.Message}", prompt);
             // WriteLine(ex);
             ReadKey(true);
         }

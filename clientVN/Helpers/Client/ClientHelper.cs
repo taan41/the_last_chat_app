@@ -37,7 +37,7 @@ static class ClientHelper
     public static string? InputData(string dataName, int minLength, int? maxLength, bool intercept)
     {
         string? inputBuffer;
-        string errorPrompt = $" Error: {dataName} must have at least {minLength} characters";
+        string errorPrompt = $" Lỗi: {dataName} cần có ít nhất {minLength} ký tự";
         int moveLength = WindowWidth - CursorLeft + errorPrompt.Length;
         
         while ((inputBuffer = IOHelper.ReadInput(maxLength, intercept)) != null && inputBuffer.Length < minLength)
@@ -63,7 +63,7 @@ static class ClientHelper
         
     //     if (inputBuffer.Length < minLength)
     //     {
-    //         WriteLine($" Error: {dataName} must have at least {minLength} characters");
+    //         WriteLine($" Lỗi: {dataName} must have at least {minLength} characters");
     //         ReadKey(true);
     //         return false;
     //     }
@@ -102,7 +102,7 @@ static class ClientHelper
 
         if(tempCmd == null)
         {
-            WriteLine(" Error: Null command");
+            WriteLine(" Lỗi: Lệnh phản hồi rỗng");
             ReadKey(true);
             return false;
         }
@@ -114,12 +114,12 @@ static class ClientHelper
                 return true;
 
             case CommandType.Error:
-                WriteLine($" Error: {tempCmd.Payload}");
+                WriteLine($" Lỗi: {tempCmd.Payload}");
                 ReadKey(true);
                 return false;
 
             default:
-                WriteLine($" Error: Received invalid command: {tempCmd.CommandType}");
+                WriteLine($" Lỗi: Lệnh phản hồi không hợp lệ: {tempCmd.CommandType}");
                 ReadKey(true);
                 return false;
         }

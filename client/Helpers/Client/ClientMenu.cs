@@ -243,9 +243,9 @@ static class ClientMenu
         WriteLine(" /help             -- Show all chat commands");
         WriteLine(" /info             -- Show info of current chat room");
         WriteLine(" /clear /cls       -- Clear console");
-        WriteLine(" /reload           -- Clear console then re-write all messages");
+        WriteLine(" /reset            -- Clear console then re-write all messages");
         WriteLine(" /file (filePath)  -- Send file to current chat room");
-        WriteLine(" /leave            -- Leave chat room");
-        WriteLine(" You can also leave using 'ESC' key");
+        WriteLine(" /exit             -- Exit chat room");
+        WriteLine(" You can also exit using 'ESC' key");
     }
 }

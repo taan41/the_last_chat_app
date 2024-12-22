@@ -7,6 +7,9 @@
 /client/bin
 /client/obj
 /client/ZeloFiles
+/clientVN/bin
+/clientVN/obj
+/clientVN/ZeloFiles
 the_last_chat_app.sln
 /.vscode
 .TODO

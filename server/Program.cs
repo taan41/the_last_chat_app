@@ -1,6 +1,6 @@
 ﻿using System.Net;
 using System.Net.Sockets;
-using Org.BouncyCastle.Tls;
+
 using static System.Console;
 using static ServerHelper;
 
@@ -139,10 +139,10 @@ class Server
 
                 case "3":
                     Write(" Enter port: ");
-
                     try
                     {
                         port = Convert.ToInt32(ReadLine());
+                        
                         if(port < 0 || port > 65535)
                             throw new FormatException();
                     }
