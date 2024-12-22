@@ -201,7 +201,7 @@ static class DBHelper
 
         public static async Task<(bool success, string errorMessage)> Add(User userToAdd)
         {
-            string query = "INSERT INTO Users (Username, Nickname, PasswordHash, Salt, OnlineStatus) VALUES (@username, @nickname, @pwdHash, @salt, @onlineStatus)";
+            string query = "INSERT INTO Users (Username, Nickname, PasswordHash, Salt) VALUES (@username, @nickname, @pwdHash, @salt)";
 
             if (userToAdd.PwdSet == null)
                 return (false, "Null user password");
@@ -517,7 +517,7 @@ static class DBHelper
                 using MySqlCommand cmd = new(query, conn);
                 cmd.Parameters.AddWithValue("@receiverID", receiverID);
                 cmd.Parameters.AddWithValue("@oldStatus", oldStatus.ToString());
-                if (newStatus != null) cmd.Parameters.AddWithValue("@status", newStatus.ToString());
+                if (newStatus != null) cmd.Parameters.AddWithValue("@newStatus", newStatus.ToString());
 
                 await cmd.ExecuteNonQueryAsync();
 
@@ -1160,7 +1160,7 @@ static class DBHelper
                     GroupMessages m
                 JOIN
                     Users u ON m.SenderId = u.UserId
-                JOIN LEFT
+                LEFT JOIN
                     Friends f ON
                         m.SenderID = f.SenderID
                         AND f.ReceiverID = @mainUserID
