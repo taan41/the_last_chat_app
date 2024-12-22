@@ -86,8 +86,6 @@ class Server
             Write(" Password: ");
             if((password = IOHelper.ReadInput(true)) == null)
                 return false;
-            if(string.IsNullOrWhiteSpace(password))
-                password = "KoCo0401@mysql";
 
             IOHelper.WriteBorder();
 
